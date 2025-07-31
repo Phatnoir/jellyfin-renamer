@@ -155,7 +155,8 @@ extract_season_episode() {
     elif [[ "$filename" =~ [Ee]pisode[[:space:]]*([0-9]{1,2}) ]] || [[ "$filename" =~ [Ee]p[[:space:]]*([0-9]{1,2}) ]]; then
         episode=$(printf "%02d" "${BASH_REMATCH[1]}")
         # Try to infer season from parent directory
-        local parent_dir=$(basename "$(dirname "$filename")")
+        local parent_dir
+        parent_dir=$(basename "$(dirname "$filename")")
         if [[ "$parent_dir" =~ [Ss]eason[[:space:]]*([0-9]{1,2}) ]] || [[ "$parent_dir" =~ [Ss]([0-9]{1,2}) ]]; then
             season=$(printf "%02d" "${BASH_REMATCH[1]}")
         else
@@ -320,8 +321,11 @@ rename_season_folders() {
 
     # Find directories that look like season folders, skip hidden directories
     while IFS= read -r -d '' folder; do
-        local folder_name=$(basename "$folder")
-        local parent_dir=$(dirname "$folder")
+        local folder_name
+        local parent_dir
+
+        folder_name=$(basename "$folder")
+        parent_dir=$(dirname "$folder")
 
         print_verbose "Processing folder: $folder_name"
 
@@ -332,7 +336,8 @@ rename_season_folders() {
         fi
 
         # Extract season number
-        local season_num=$(extract_season_number "$folder_name")
+        local season_num
+        season_num=$(extract_season_number "$folder_name")
         if [[ -z "$season_num" ]]; then
             print_verbose "Could not extract season number from: $folder_name"
             continue
@@ -360,9 +365,13 @@ rename_episode_files() {
 
     # Find all media files, skip hidden directories
     while IFS= read -r -d '' file; do
-        local file_name=$(basename "$file")
-        local file_dir=$(dirname "$file")
-        local extension="${file_name##*.}"
+        local file_name
+        local file_dir
+        local extension
+
+        file_name=$(basename "$file")
+        file_dir=$(dirname "$file")
+        extension="${file_name##*.}"
 
         ((file_count++))
 
@@ -375,18 +384,23 @@ rename_episode_files() {
         fi
 
         # Extract season and episode
-        local season_episode=$(extract_season_episode "$file_name")
+        local season_episode
+        season_episode=$(extract_season_episode "$file_name")
         if [[ -z "$season_episode" ]]; then
             print_status "$RED" "  ✗ Could not extract episode info from: $file_name"
             continue
         fi
 
+        local episode_title
+        local new_file_name
+        local new_file_path
+
         # Extract episode title
-        local episode_title=$(extract_episode_title "$file_name" "$season_episode")
+        episode_title=$(extract_episode_title "$file_name" "$season_episode")
 
         # Format the new filename
-        local new_file_name=$(format_filename "$season_episode" "$episode_title" "$extension")
-        local new_file_path="$file_dir/$new_file_name"
+        new_file_name=$(format_filename "$season_episode" "$episode_title" "$extension")
+        new_file_path="$file_dir/$new_file_name"
 
         if safe_rename "$file" "$new_file_path" "file"; then
             ((renamed_count++))
@@ -402,7 +416,8 @@ show_summary() {
     print_status "$BLUE" "=== Summary ==="
 
     # Count season folders
-    local season_count=$(find "$BASE_PATH" -maxdepth 2 -type d -name "Season *" | wc -l)
+    local season_count
+    season_count=$(find "$BASE_PATH" -maxdepth 2 -type d -name "Season *" | wc -l)
     print_status "$GREEN" "Season folders: $season_count"
 
     # Count formatted episode files

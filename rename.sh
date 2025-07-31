@@ -94,6 +94,7 @@ normalize_text() {
     # Remove leading/trailing whitespace
     text=$(echo "$text" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
     # Replace multiple spaces with single space
+    # shellcheck disable=SC2001
     text=$(echo "$text" | sed 's/[[:space:]]\+/ /g')
     echo "$text"
 }

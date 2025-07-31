@@ -1,0 +1,16 @@
+name: Shellcheck
+
+on:
+  push:
+    branches: main
+  pull_request:
+    branches: main
+
+jobs:
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+      - uses: bewuethr/shellcheck-action@v2

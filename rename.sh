@@ -100,9 +100,9 @@ normalize_text() {
 
 clean_episode_title() {
     local title="$1"
-    
+
     print_verbose "Original title: '$title'"
-    
+
     # Remove common junk patterns
     title=$(echo "$title" | sed -E '
         # Remove series name if provided
@@ -117,10 +117,10 @@ clean_episode_title() {
         # Remove file extension artifacts
         s/\.(mkv|mp4|avi|m4v|mov|wmv|flv)$//i
     ')
-    
+
     # Normalize whitespace
     title=$(normalize_text "$title")
-    
+
     print_verbose "Cleaned title: '$title'"
     echo "$title"
 }
@@ -129,27 +129,27 @@ extract_season_episode() {
     local filename="$1"
     local season=""
     local episode=""
-    
+
     print_verbose "Extracting season/episode from: '$filename'"
-    
+
     # Pattern 1: S01E01, S1E1, etc.
     if [[ "$filename" =~ [Ss]([0-9]{1,2})[Ee]([0-9]{1,2}) ]]; then
         season=$(printf "%02d" "${BASH_REMATCH[1]}")
         episode=$(printf "%02d" "${BASH_REMATCH[2]}")
         print_verbose "Found S${season}E${episode} pattern"
-    
+
     # Pattern 2: 1x01, 01x01, etc.
     elif [[ "$filename" =~ ([0-9]{1,2})x([0-9]{1,2}) ]]; then
         season=$(printf "%02d" "${BASH_REMATCH[1]}")
         episode=$(printf "%02d" "${BASH_REMATCH[2]}")
         print_verbose "Found ${season}x${episode} pattern"
-    
+
     # Pattern 3: Season 1 Episode 1, Season 01 Episode 01, etc.
     elif [[ "$filename" =~ [Ss]eason[[:space:]]*([0-9]{1,2})[[:space:]]*[Ee]pisode[[:space:]]*([0-9]{1,2}) ]]; then
         season=$(printf "%02d" "${BASH_REMATCH[1]}")
         episode=$(printf "%02d" "${BASH_REMATCH[2]}")
         print_verbose "Found Season X Episode Y pattern"
-    
+
     # Pattern 4: Episode numbers in sequence (risky, requires season context)
     elif [[ "$filename" =~ [Ee]pisode[[:space:]]*([0-9]{1,2}) ]] || [[ "$filename" =~ [Ee]p[[:space:]]*([0-9]{1,2}) ]]; then
         episode=$(printf "%02d" "${BASH_REMATCH[1]}")
@@ -162,7 +162,7 @@ extract_season_episode() {
         fi
         print_verbose "Found Episode pattern, inferred season $season"
     fi
-    
+
     if [[ -n "$season" && -n "$episode" ]]; then
         echo "S${season}E${episode}"
     else
@@ -173,22 +173,22 @@ extract_season_episode() {
 extract_episode_title() {
     local filename="$1"
     local season_episode="$2"
-    
+
     print_verbose "Extracting title from: '$filename'"
-    
+
     # Remove the season/episode part and common separators
     local title="$filename"
-    
+
     # Remove season/episode patterns
     title=$(echo "$title" | sed -E "s/[Ss][0-9]{1,2}[Ee][0-9]{1,2}[[:space:]]*[-._]*[[:space:]]*//")
     title=$(echo "$title" | sed -E "s/[0-9]{1,2}x[0-9]{1,2}[[:space:]]*[-._]*[[:space:]]*//")
     title=$(echo "$title" | sed -E "s/[Ss]eason[[:space:]]*[0-9]{1,2}[[:space:]]*[Ee]pisode[[:space:]]*[0-9]{1,2}[[:space:]]*[-._]*[[:space:]]*//i")
     title=$(echo "$title" | sed -E "s/[Ee]pisode[[:space:]]*[0-9]{1,2}[[:space:]]*[-._]*[[:space:]]*//i")
     title=$(echo "$title" | sed -E "s/[Ee]p[[:space:]]*[0-9]{1,2}[[:space:]]*[-._]*[[:space:]]*//i")
-    
+
     # Clean the title
     title=$(clean_episode_title "$title")
-    
+
     # If title is too short or looks like junk, return empty
     if [[ ${#title} -lt 3 ]] || [[ "$title" =~ ^[0-9.-]+$ ]]; then
         print_verbose "Title too short or looks like junk, discarding"
@@ -200,7 +200,7 @@ extract_episode_title() {
 
 extract_season_number() {
     local folder_name="$1"
-    
+
     # Extract season number from various patterns
     if [[ "$folder_name" =~ [Ss]eason[[:space:]]*([0-9]{1,2}) ]]; then
         printf "%d" "${BASH_REMATCH[1]}"
@@ -219,19 +219,19 @@ safe_rename() {
     local old_path="$1"
     local new_path="$2"
     local type="$3"
-    
+
     # Skip if source doesn't exist
     if [[ ! -e "$old_path" ]]; then
         print_status "$YELLOW" "  Warning: Source doesn't exist: $old_path"
         return 1
     fi
-    
+
     # Skip if already correctly named
     if [[ "$old_path" == "$new_path" ]]; then
         print_status "$GREEN" "  ✓ Already correct: $(basename "$new_path")"
         return 0
     fi
-    
+
     # Check if destination already exists
     if [[ -e "$new_path" && "$old_path" != "$new_path" ]]; then
         if [[ "$FORCE" == true ]]; then
@@ -241,7 +241,7 @@ safe_rename() {
             return 1
         fi
     fi
-    
+
     if [[ "$DRY_RUN" == true ]]; then
         print_status "$YELLOW" "  [DRY] $type: $(basename "$old_path") → $(basename "$new_path")"
     else
@@ -257,7 +257,7 @@ safe_rename() {
 
 is_already_formatted() {
     local filename="$1"
-    
+
     # Check if file already matches our target formats with proper anchoring
     case "$OUTPUT_FORMAT" in
         "SxxExx - Title")
@@ -279,16 +279,16 @@ format_filename() {
     local season_episode="$1"
     local title="$2"
     local extension="$3"
-    
+
     # Extract episode number for fallback
     local episode="${season_episode:4:2}"
     episode=$((10#$episode))  # Remove leading zero
-    
+
     # Fallback to generic title if empty
     if [[ -z "$title" ]]; then
         title="Episode $episode"
     fi
-    
+
     case "$OUTPUT_FORMAT" in
         "SxxExx - Title")
             echo "$season_episode - $title.$extension"
@@ -314,38 +314,38 @@ format_filename() {
 
 rename_season_folders() {
     print_status "$BLUE" "Step 1: Renaming season folders..."
-    
+
     local folder_count=0
-    
+
     # Find directories that look like season folders, skip hidden directories
     while IFS= read -r -d '' folder; do
         local folder_name=$(basename "$folder")
         local parent_dir=$(dirname "$folder")
-        
+
         print_verbose "Processing folder: $folder_name"
-        
+
         # Skip if already in correct format
         if [[ "$folder_name" =~ ^Season\ [0-9]+$ ]]; then
             print_status "$GREEN" "  ✓ Already correct: $folder_name"
             continue
         fi
-        
+
         # Extract season number
         local season_num=$(extract_season_number "$folder_name")
         if [[ -z "$season_num" ]]; then
             print_verbose "Could not extract season number from: $folder_name"
             continue
         fi
-        
+
         # Create new folder name
         local new_folder_name="Season $season_num"
         local new_folder_path="$parent_dir/$new_folder_name"
-        
+
         safe_rename "$folder" "$new_folder_path" "folder"
         ((folder_count++))
-        
+
     done < <(find "$BASE_PATH" -type d -not -path '*/\.*' -regextype posix-extended -regex '.*/.*([Ss]eason|[Ss][0-9]{1,2}).*' -print0)
-    
+
     if [[ $folder_count -eq 0 ]]; then
         print_status "$YELLOW" "  No season folders found to rename"
     fi
@@ -353,57 +353,57 @@ rename_season_folders() {
 
 rename_episode_files() {
     print_status "$BLUE" "Step 2: Renaming episode files..."
-    
+
     local file_count=0
     local renamed_count=0
-    
+
     # Find all media files, skip hidden directories
     while IFS= read -r -d '' file; do
         local file_name=$(basename "$file")
         local file_dir=$(dirname "$file")
         local extension="${file_name##*.}"
-        
+
         ((file_count++))
-        
+
         print_verbose "Processing file: $file_name"
-        
+
         # Skip if already in correct format
         if is_already_formatted "$file_name"; then
             print_status "$GREEN" "  ✓ Already formatted: $file_name"
             continue
         fi
-        
+
         # Extract season and episode
         local season_episode=$(extract_season_episode "$file_name")
         if [[ -z "$season_episode" ]]; then
             print_status "$RED" "  ✗ Could not extract episode info from: $file_name"
             continue
         fi
-        
+
         # Extract episode title
         local episode_title=$(extract_episode_title "$file_name" "$season_episode")
-        
+
         # Format the new filename
         local new_file_name=$(format_filename "$season_episode" "$episode_title" "$extension")
         local new_file_path="$file_dir/$new_file_name"
-        
+
         if safe_rename "$file" "$new_file_path" "file"; then
             ((renamed_count++))
         fi
-        
+
     done < <(find "$BASE_PATH" -type f -not -path '*/\.*' -regextype posix-extended -regex ".*\.($ALL_EXTENSIONS)$" -print0)
-    
+
     print_status "$CYAN" "  Processed $file_count files, renamed $renamed_count"
 }
 
 show_summary() {
     echo ""
     print_status "$BLUE" "=== Summary ==="
-    
+
     # Count season folders
     local season_count=$(find "$BASE_PATH" -maxdepth 2 -type d -name "Season *" | wc -l)
     print_status "$GREEN" "Season folders: $season_count"
-    
+
     # Count formatted episode files
     local formatted_count=0
     case "$OUTPUT_FORMAT" in
@@ -418,7 +418,7 @@ show_summary() {
             ;;
     esac
     print_status "$GREEN" "Formatted episode files: $formatted_count"
-    
+
     if [[ "$DRY_RUN" == true ]]; then
         echo ""
         print_status "$YELLOW" "This was a dry run. To apply changes, run without --dry-run"
@@ -498,7 +498,7 @@ if command -v realpath >/dev/null 2>&1; then
 elif command -v python3 >/dev/null 2>&1; then
     BASE_PATH=$(python3 -c "import os,sys; print(os.path.abspath(sys.argv[1]))" "$BASE_PATH")
 else
-    # Simple fallback - expand and remove ./ 
+    # Simple fallback - expand and remove ./
     BASE_PATH=$(cd "$BASE_PATH" && pwd)
 fi
 

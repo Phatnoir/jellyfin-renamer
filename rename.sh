@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Universal Media Renamer for Jellyfin/Plex - Clean Edition
-# Completely fixed verbose output pollution and series name detection
-# Usage: ./clean_rename.sh [options] [path]
+# Universal Media Renamer for Jellyfin/Plex - Fixed Edition
+# Fixed title extraction and year handling for complex filenames
+# Usage: ./rename_fixed.sh [options] [path]
 
 set -u
 shopt -s nocaseglob
@@ -23,13 +23,13 @@ OUTPUT_FORMAT="Show - SxxExx - Title"
 VIDEO_EXTENSIONS="mkv|mp4|avi|m4v|mov|wmv|flv|webm|ts|m2ts"
 
 # Color codes
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-PURPLE='\033[0;35m'
-NC='\033[0m'
+RED="\033[0;31m"
+GREEN="\033[0;32m"
+YELLOW="\033[1;33m"
+BLUE="\033[0;34m"
+CYAN="\033[0;36m"
+PURPLE="\033[0;35m"
+NC="\033[0m"
 
 # =============================================================================
 # UTILITY FUNCTIONS
@@ -47,7 +47,7 @@ print_verbose() {
 
 usage() {
     cat << EOF
-Universal Media Renamer for Jellyfin/Plex - Clean Edition
+Universal Media Renamer for Jellyfin/Plex - Fixed Edition
 
 Usage: $0 [options] [path]
 
@@ -58,6 +58,7 @@ Options:
   --series "Name"     Specify series name (auto-detected if not provided)
   --format FORMAT     Output format (default: "Show - SxxExx - Title")
                       Options: 
+                        "Show (Year) - SxxExx - Title" (e.g., "Breaking Bad (2008) - S01E01 - Pilot.mkv")
                         "Show (Year) - SxxExx" (e.g., "Breaking Bad (2008) - S01E01.mkv")
                         "Show - SxxExx - Title" (e.g., "Breaking Bad - S01E01 - Pilot.mkv")
                         "Show - SxxExx" (e.g., "Breaking Bad - S01E01.mkv")
@@ -70,8 +71,8 @@ Arguments:
 
 Examples:
   $0 --dry-run .
-  $0 --series "3 Body Problem" --dry-run /path/to/shows
-  $0 --format "Show - SxxExx" --dry-run .
+  $0 --series "Doctor Who (2005)" --dry-run /path/to/shows
+  $0 --format "Show (Year) - SxxExx - Title" --dry-run .
 
 The script will:
 1. Auto-detect series name from folder or filenames
@@ -92,11 +93,26 @@ detect_series_name() {
     local clean_name
     
     parent_name=$(basename "$base_path")
+    
+    # Check if we're in a Season/season folder
+    if [[ "$parent_name" =~ ^[Ss]eason[[:space:]]*[0-9]+$ ]] || [[ "$parent_name" =~ ^[Ss][0-9]+$ ]]; then
+        # We're in a season folder, go up one more level for the series name
+        local grandparent_path=$(dirname "$base_path")
+        parent_name=$(basename "$grandparent_path")
+    fi
+    
+    # Also check for "Specials" folder
+    if [[ "$parent_name" =~ ^[Ss]pecials?$ ]]; then
+        # We're in a specials folder, go up one more level for the series name
+        local grandparent_path=$(dirname "$base_path")
+        parent_name=$(basename "$grandparent_path")
+    fi
+    
     clean_name="$parent_name"
     
     # Remove season indicators but keep year
     clean_name=$(echo "$clean_name" | sed 's/ *- *[Ss]eason.*$//')
-    clean_name=$(echo "$clean_name" | sed 's/ *[Ss][0-9].*$//')
+    clean_name=$(echo "$clean_name" | sed 's/ *[Ss][0-9][0-9]*.*$//')
     
     # Clean up dots, underscores, and normalize spacing
     clean_name=$(echo "$clean_name" | sed 's/[._]/ /g')
@@ -114,6 +130,7 @@ detect_series_name_no_year() {
     
     # Remove year patterns
     clean_name=$(echo "$clean_name" | sed 's/ *(2[0-9][0-9][0-9]).*$//')
+    clean_name=$(echo "$clean_name" | sed 's/ *(19[0-9][0-9]).*$//')
     clean_name=$(echo "$clean_name" | sed 's/ *\[[0-9][0-9][0-9][0-9]\].*$//')
     clean_name=$(echo "$clean_name" | sed 's/^ *//; s/ *$//')
     
@@ -152,16 +169,33 @@ clean_title() {
     
     # Remove series name patterns if provided
     if [[ -n "$series_name" ]]; then
+        # Get series name without year for cleaning
+        local series_no_year
+        series_no_year=$(echo "$series_name" | sed 's/ *(19[0-9][0-9])//g; s/ *(2[0-9][0-9][0-9])//g')
+        
         # Convert series name variations to match common filename patterns
-        local series_dot="${series_name// /.}"
-        local series_dash="${series_name// /-}"
-        local series_under="${series_name// /_}"
+        local series_dot="${series_no_year// /.}"
+        local series_dash="${series_no_year// /-}"
+        local series_under="${series_no_year// /_}"
         
         # Remove series patterns (case insensitive)
-        title=$(echo "$title" | sed "s/^${series_dot}[._-]*//i" 2>/dev/null || echo "$title")
-        title=$(echo "$title" | sed "s/^${series_dash}[._-]*//i" 2>/dev/null || echo "$title")
-        title=$(echo "$title" | sed "s/^${series_under}[._-]*//i" 2>/dev/null || echo "$title")
+        title=$(echo "$title" | sed "s/^${series_dot}[._-]*//gi" 2>/dev/null || echo "$title")
+        title=$(echo "$title" | sed "s/^${series_dash}[._-]*//gi" 2>/dev/null || echo "$title")
+        title=$(echo "$title" | sed "s/^${series_under}[._-]*//gi" 2>/dev/null || echo "$title")
+        title=$(echo "$title" | sed "s/^${series_no_year}[._-]*//gi" 2>/dev/null || echo "$title")
+        
+        # Also remove series name with year patterns (like "Doctor Who 2005")
+        local series_with_years="${series_no_year} 2[0-9][0-9][0-9]"
+        title=$(echo "$title" | sed "s/^${series_no_year} 2[0-9][0-9][0-9][._-]*//gi" 2>/dev/null || echo "$title")
+        title=$(echo "$title" | sed "s/^${series_no_year} 19[0-9][0-9][._-]*//gi" 2>/dev/null || echo "$title")
     fi
+    
+    # Remove everything in parentheses EXCEPT if it's the entire title
+    # This preserves titles like "(Part 1)" when that's all we have
+    if [[ ! "$title" =~ ^\([^\)]+\)$ ]]; then
+        title=$(echo "$title" | sed 's/([^)]*)//g')
+    fi
+    title=$(echo "$title" | sed 's/\[[^]]*\]//g')
     
     # Remove quality indicators
     title=$(echo "$title" | sed 's/[._-]*720p[._-]*/ /gi')
@@ -172,10 +206,13 @@ clean_title() {
     # Remove codec info
     title=$(echo "$title" | sed 's/[._-]*x264[._-]*/ /gi')
     title=$(echo "$title" | sed 's/[._-]*x265[._-]*/ /gi')
+    title=$(echo "$title" | sed 's/[._-]*xvid[._-]*/ /gi')
     title=$(echo "$title" | sed 's/[._-]*HEVC[._-]*/ /gi')
     title=$(echo "$title" | sed 's/[._-]*H264[._-]*/ /gi')
     
     # Remove source indicators
+    title=$(echo "$title" | sed 's/[._-]*pdtv[._-]*/ /gi')
+    title=$(echo "$title" | sed 's/[._-]*ws[._-]*/ /gi')
     title=$(echo "$title" | sed 's/[._-]*WEB[._-]*/ /gi')
     title=$(echo "$title" | sed 's/[._-]*WEB-DL[._-]*/ /gi')
     title=$(echo "$title" | sed 's/[._-]*BluRay[._-]*/ /gi')
@@ -184,6 +221,11 @@ clean_title() {
     # Remove audio info
     title=$(echo "$title" | sed 's/[._-]*AAC[._-]*/ /gi')
     title=$(echo "$title" | sed 's/[._-]*AC3[._-]*/ /gi')
+    
+    # Remove common tags as whole words
+    title=$(echo "$title" | sed 's/\bFIXED\b//gi')
+    title=$(echo "$title" | sed 's/\bREPACK\b//gi')
+    title=$(echo "$title" | sed 's/\bPROPER\b//gi')
     
     # Remove release group patterns (like -GroupName at end)
     title=$(echo "$title" | sed 's/-[A-Za-z][A-Za-z0-9]*$//')
@@ -194,7 +236,7 @@ clean_title() {
     title=$(echo "$title" | sed 's/\.avi$//i')
     
     # Normalize spacing
-    title=$(echo "$title" | sed 's/[._-]/ /g')
+    title=$(echo "$title" | sed 's/[._]/ /g')
     title=$(echo "$title" | sed 's/  */ /g')
     title=$(echo "$title" | sed 's/^ *//; s/ *$//')
     
@@ -207,19 +249,65 @@ get_episode_title() {
     local series_name="$3"
     local title
     
-    title="$filename"
+    # Start with just the filename without extension
+    title="${filename%.*}"
     
     # Remove season/episode patterns
-    title=$(echo "$title" | sed "s/[Ss][0-9][0-9][Ee][0-9][0-9][._-]*//")
+    title=$(echo "$title" | sed "s/[Ss][0-9][0-9]*[Ee][0-9][0-9]*[._-]*//")
     title=$(echo "$title" | sed "s/[0-9][0-9]*x[0-9][0-9]*[._-]*//")
     
-    # Clean the title
+    # Remove series name and year combo (like "Doctor Who 2006")
+    if [[ -n "$series_name" ]]; then
+        local series_no_year
+        series_no_year=$(echo "$series_name" | sed 's/ *(19[0-9][0-9])//g; s/ *(2[0-9][0-9][0-9])//g')
+        # Remove series with any year
+        title=$(echo "$title" | sed "s/^${series_no_year} [12][0-9][0-9][0-9] *//i" 2>/dev/null || echo "$title")
+        # Remove just series name
+        title=$(echo "$title" | sed "s/^${series_no_year} *//i" 2>/dev/null || echo "$title")
+    fi
+    
+    # Now we should have something like "The Girl In The Fireplace (ws.pdtv.xvid-gothic.[VTV])"
+    # Extract the actual title before the parentheses
+    local actual_title=""
+    if [[ $title =~ ^([^(]+)\() ]]; then
+        # There is text before parentheses – that is our title
+        actual_title="${BASH_REMATCH[1]}"
+    elif [[ "$title" =~ ^\(([^\)]+)\) ]]; then
+        # The whole thing is in parentheses – check if it is a title
+        local paren_content="${BASH_REMATCH[1]}"
+        # Check if it looks like technical info
+        if [[ ! "$paren_content" =~ ^(ws|pdtv|xvid|REPACK|WS|PDTV|XviD|gothic|GOTHiC) ]]; then
+            actual_title="$paren_content"
+        fi
+    else
+        # No parentheses, use the whole thing
+        actual_title="$title"
+    fi
+    
+    # Use the extracted title or fallback to original
+    if [[ -n "$actual_title" ]]; then
+        title="$actual_title"
+    fi
+    
+    # Remove year at the beginning of the title
+    title=$(echo "$title" | sed "s/^[12][0-9][0-9][0-9][[:space:]]*//") 
+    
+    # Clean the title (removes metadata, etc.)
     title=$(clean_title "$title" "$series_name")
+    
+    # Remove year AGAIN after cleaning, in case it survived
+    title=$(echo "$title" | sed "s/^[12][0-9][0-9][0-9][[:space:]]*//") 
+    
+    # Final cleanup of common tags that might have survived
+    title=$(echo "$title" | sed "s/\bFIXED\b//gi")
+    title=$(echo "$title" | sed "s/\bREPACK\b//gi")
+    title=$(echo "$title" | sed "s/  */ /g")
+    title=$(echo "$title" | sed "s/^ *//; s/ *$//")
     
     # Check if we have a meaningful title
     if [[ ${#title} -lt 3 ]] || \
        [[ "$title" =~ ^[0-9.-]+$ ]] || \
-       [[ "$title" =~ ^(WEB|H264|x264|x265|HEVC)$ ]]; then
+       [[ "$title" =~ ^(WEB|H264|x264|x265|HEVC|pdtv|ws|FIXED|REPACK|gothic|GOTHiC)$ ]]; then
         echo ""
     else
         echo "$title"
@@ -233,6 +321,17 @@ build_filename() {
     local series_name="$4"
     
     case "$OUTPUT_FORMAT" in
+        "Show (Year) - SxxExx - Title")
+            if [[ -n "$title" && -n "$series_name" ]]; then
+                echo "$series_name - $season_episode - $title.$extension"
+            elif [[ -n "$series_name" ]]; then
+                echo "$series_name - $season_episode.$extension"
+            elif [[ -n "$title" ]]; then
+                echo "$season_episode - $title.$extension"
+            else
+                echo "$season_episode.$extension"
+            fi
+            ;;
         "Show (Year) - SxxExx")
             if [[ -n "$series_name" ]]; then
                 echo "$series_name - $season_episode.$extension"
@@ -241,13 +340,13 @@ build_filename() {
             fi
             ;;
         "Show - SxxExx - Title")
-            if [[ -n "$title" && -n "$series_name" ]]; then
-                local clean_series_name
+            local clean_series_name
+            if [[ -n "$series_name" ]]; then
                 clean_series_name=$(detect_series_name_no_year "$BASE_PATH")
+            fi
+            if [[ -n "$title" && -n "$clean_series_name" ]]; then
                 echo "$clean_series_name - $season_episode - $title.$extension"
-            elif [[ -n "$series_name" ]]; then
-                local clean_series_name
-                clean_series_name=$(detect_series_name_no_year "$BASE_PATH")
+            elif [[ -n "$clean_series_name" ]]; then
                 echo "$clean_series_name - $season_episode.$extension"
             elif [[ -n "$title" ]]; then
                 echo "$season_episode - $title.$extension"
@@ -256,8 +355,8 @@ build_filename() {
             fi
             ;;
         "Show - SxxExx")
+            local clean_series_name
             if [[ -n "$series_name" ]]; then
-                local clean_series_name
                 clean_series_name=$(detect_series_name_no_year "$BASE_PATH")
                 echo "$clean_series_name - $season_episode.$extension"
             else
@@ -275,11 +374,11 @@ build_filename() {
             echo "$season_episode.$extension"
             ;;
         *)
-            # Default fallback
+            # Default fallback (Show (Year) - SxxExx - Title)
             if [[ -n "$title" && -n "$series_name" ]]; then
-                local clean_series_name
-                clean_series_name=$(detect_series_name_no_year "$BASE_PATH")
-                echo "$clean_series_name - $season_episode - $title.$extension"
+                echo "$series_name - $season_episode - $title.$extension"
+            elif [[ -n "$series_name" ]]; then
+                echo "$series_name - $season_episode.$extension"
             else
                 echo "$season_episode.$extension"
             fi
@@ -296,7 +395,7 @@ safe_rename() {
     local new_path="$2"
     local type="$3"
     
-    # Skip if source doesn't exist
+    # Skip if source does not exist
     if [[ ! -e "$old_path" ]]; then
         print_status "$YELLOW" "  Warning: Source doesn't exist: $old_path"
         return 1
@@ -350,7 +449,7 @@ rename_episode_files() {
         print_verbose "Auto-detected series name: '$detected_series'"
     fi
     
-    # Process files
+    # Process video files
     while IFS= read -r file; do
         [[ -z "$file" ]] && continue
         [[ ! -f "$file" ]] && continue
@@ -398,13 +497,100 @@ rename_episode_files() {
     print_status "$CYAN" "  Processed $file_count files, renamed $renamed_count"
 }
 
+rename_subtitle_files() {
+    print_status "$BLUE" "Processing subtitle files..."
+    
+    local sub_count=0
+    local renamed_count=0
+    local detected_series="$SERIES_NAME"
+    
+    # Auto-detect series name if not provided
+    if [[ -z "$detected_series" ]]; then
+        detected_series=$(detect_series_name "$BASE_PATH")
+        print_verbose "Using series name: '$detected_series'"
+    fi
+    
+    # Process subtitle files
+    while IFS= read -r file; do
+        [[ -z "$file" ]] && continue
+        [[ ! -f "$file" ]] && continue
+        
+        local file_name=$(basename "$file")
+        local file_dir=$(dirname "$file")
+        local extension="${file_name##*.}"
+        
+        sub_count=$((sub_count + 1))
+        
+        print_verbose "Processing subtitle: $file_name"
+        
+        # Extract season and episode
+        local season_episode
+        season_episode=$(get_season_episode "$file_name")
+        if [[ -z "$season_episode" ]]; then
+            print_status "$RED" "  ✗ Could not extract episode info from: $file_name"
+            continue
+        fi
+        print_verbose "Extracted season/episode: $season_episode"
+        
+        # Check for language code in filename (e.g., .en.srt, .eng.srt)
+        local lang_code=""
+        local base_name="${file_name%.*}"  # Remove extension
+        
+        # Check if there's a language code before the extension
+        if [[ "$base_name" =~ \.([a-z]{2,3})$ ]]; then
+            lang_code="${BASH_REMATCH[1]}"
+            print_verbose "Detected language code: $lang_code"
+        fi
+        
+        # Extract episode title
+        local episode_title
+        episode_title=$(get_episode_title "$file_name" "$season_episode" "$detected_series")
+        print_verbose "Extracted episode title: '$episode_title'"
+        
+        # Build new filename
+        local new_file_name
+        local base_new_name
+        base_new_name=$(build_filename "$season_episode" "$episode_title" "" "$detected_series")
+        base_new_name="${base_new_name%.*}"  # Remove empty extension added by build_filename
+        
+        # Add language code if present
+        if [[ -n "$lang_code" ]]; then
+            new_file_name="${base_new_name}.${lang_code}.${extension}"
+        else
+            new_file_name="${base_new_name}.${extension}"
+        fi
+        
+        local new_file_path="$file_dir/$new_file_name"
+        print_verbose "Formatted subtitle filename: '$new_file_name'"
+        
+        # Skip if already in correct format
+        if [[ "$file_name" == "$new_file_name" ]]; then
+            print_status "$GREEN" "  ✓ Already formatted: $file_name"
+            continue
+        fi
+        
+        if safe_rename "$file" "$new_file_path" "subtitle"; then
+            renamed_count=$((renamed_count + 1))
+        fi
+        
+    done < <(find "$BASE_PATH" -type f \( -iname '*.srt' -o -iname '*.sub' -o -iname '*.ass' -o -iname '*.ssa' -o -iname '*.vtt' \) 2>/dev/null)
+    
+    if [[ $sub_count -gt 0 ]]; then
+        print_status "$CYAN" "  Processed $sub_count subtitle files, renamed $renamed_count"
+    fi
+}
+
 show_summary() {
     echo ""
     print_status "$BLUE" "=== Summary ==="
     
     local file_count
-    file_count=$(find "$BASE_PATH" -type f \( -iname '*.mkv' -o -iname '*.mp4' -o -iname '*.avi' \) 2>/dev/null | wc -l)
+    local sub_count
+    file_count=$(find "$BASE_PATH" -type f \( -iname '*.mkv' -o -iname '*.mp4' -o -iname '*.avi' -o -iname '*.m4v' -o -iname '*.mov' -o -iname '*.wmv' -o -iname '*.flv' -o -iname '*.webm' -o -iname '*.ts' -o -iname '*.m2ts' \) 2>/dev/null | wc -l)
+    sub_count=$(find "$BASE_PATH" -type f \( -iname '*.srt' -o -iname '*.sub' -o -iname '*.ass' -o -iname '*.ssa' -o -iname '*.vtt' \) 2>/dev/null | wc -l)
+    
     print_status "$GREEN" "Total episode files: $file_count"
+    [[ $sub_count -gt 0 ]] && print_status "$GREEN" "Total subtitle files: $sub_count"
     
     if [[ "$DRY_RUN" == true ]]; then
         echo ""
@@ -442,12 +628,12 @@ while [[ $# -gt 0 ]]; do
         --format)
             OUTPUT_FORMAT="$2"
             case "$OUTPUT_FORMAT" in
-                "Show (Year) - SxxExx"|"Show - SxxExx - Title"|"Show - SxxExx"|"SxxExx - Title"|"SxxExx")
+                "Show (Year) - SxxExx - Title"|"Show (Year) - SxxExx"|"Show - SxxExx - Title"|"Show - SxxExx"|"SxxExx - Title"|"SxxExx")
                     # Valid format
                     ;;
                 *)
-                    print_status "$RED" "Error: Invalid format '$OUTPUT_FORMAT'"
-                    print_status "$YELLOW" "Valid formats: 'Show (Year) - SxxExx', 'Show - SxxExx - Title', 'Show - SxxExx', 'SxxExx - Title', 'SxxExx'"
+                    print_status "$RED" "Error: Invalid format \"$OUTPUT_FORMAT\""
+					print_status "$YELLOW" "Valid formats: \"Show (Year) - SxxExx - Title\", \"Show - SxxExx\", etc."
                     exit 1
                     ;;
             esac
@@ -475,7 +661,7 @@ done
 
 # Validate base path
 if [[ ! -d "$BASE_PATH" ]]; then
-    print_status "$RED" "Error: Directory '$BASE_PATH' does not exist!"
+    print_status "$RED" "Error: Directory \"$BASE_PATH\" does not exist!"
     exit 1
 fi
 
@@ -487,7 +673,7 @@ else
 fi
 
 # Show configuration
-print_status "$BLUE" "=== Universal Media Renamer - Clean Edition ==="
+print_status "$BLUE" "=== Universal Media Renamer - Fixed Edition ==="
 print_status "$BLUE" "Base path: $BASE_PATH"
 print_status "$BLUE" "Output format: $OUTPUT_FORMAT"
 [[ -n "$SERIES_NAME" ]] && print_status "$BLUE" "Series name: $SERIES_NAME"
@@ -498,8 +684,9 @@ echo ""
 
 # Main processing
 rename_episode_files
+rename_subtitle_files
 
 # Show summary
 show_summary
 
-print_status "$PURPLE" "Clean Universal Media Renamer completed successfully!"
+print_status "$PURPLE" "Universal Media Renamer completed successfully!"

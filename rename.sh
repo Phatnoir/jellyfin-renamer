@@ -185,10 +185,20 @@ clean_title() {
         title=$(echo "$title" | sed "s/^${series_no_year}[._-]*//gi" 2>/dev/null || echo "$title")
         
         # Also remove series name with year patterns (like "Doctor Who 2005")
-        local series_with_years="${series_no_year} 2[0-9][0-9][0-9]"
         title=$(echo "$title" | sed "s/^${series_no_year} 2[0-9][0-9][0-9][._-]*//gi" 2>/dev/null || echo "$title")
         title=$(echo "$title" | sed "s/^${series_no_year} 19[0-9][0-9][._-]*//gi" 2>/dev/null || echo "$title")
     fi
+    
+    # FIXED: Better technical tag removal with word boundaries and separators
+    # Remove everything after common quality/codec indicators (with proper separators)
+    title=$(echo "$title" | sed -E 's/[._ -]+(720p|1080p|2160p|4K|480p|576p)([._ -].*)?$//i')
+    title=$(echo "$title" | sed -E 's/[._ -]+(x264|x265|HEVC|H\.?264|H\.?265)([._ -].*)?$//i')
+    title=$(echo "$title" | sed -E 's/[._ -]+(WEB(-DL)?|BluRay|BDRip|DVDRip|HDTV|PDTV)([._ -].*)?$//i')
+    title=$(echo "$title" | sed -E 's/[._ -]+(AMZN|NFLX|HULU|DSNP|HBO|MAX)([._ -].*)?$//i')
+    title=$(echo "$title" | sed -E 's/[._ -]+(AAC|AC3|DTS|DDP([0-9](\.[0-9])?)?)([._ -].*)?$//i')
+    
+    # Restore missing ws cleanup
+    title=$(echo "$title" | sed 's/[._-]*ws[._-]*/ /gi')
     
     # Remove everything in parentheses EXCEPT if it's the entire title
     # This preserves titles like "(Part 1)" when that's all we have
@@ -197,47 +207,27 @@ clean_title() {
     fi
     title=$(echo "$title" | sed 's/\[[^]]*\]//g')
     
-    # Remove quality indicators
-    title=$(echo "$title" | sed 's/[._-]*720p[._-]*/ /gi')
-    title=$(echo "$title" | sed 's/[._-]*1080p[._-]*/ /gi')
-    title=$(echo "$title" | sed 's/[._-]*2160p[._-]*/ /gi')
-    title=$(echo "$title" | sed 's/[._-]*4K[._-]*/ /gi')
+    # FIXED: Better release group removal (case-insensitive, handles lowercase)
+    title=$(echo "$title" | sed -E 's/-[A-Za-z0-9]+$//')
     
-    # Remove codec info
-    title=$(echo "$title" | sed 's/[._-]*x264[._-]*/ /gi')
-    title=$(echo "$title" | sed 's/[._-]*x265[._-]*/ /gi')
-    title=$(echo "$title" | sed 's/[._-]*xvid[._-]*/ /gi')
-    title=$(echo "$title" | sed 's/[._-]*HEVC[._-]*/ /gi')
-    title=$(echo "$title" | sed 's/[._-]*H264[._-]*/ /gi')
-    
-    # Remove source indicators
-    title=$(echo "$title" | sed 's/[._-]*pdtv[._-]*/ /gi')
-    title=$(echo "$title" | sed 's/[._-]*ws[._-]*/ /gi')
-    title=$(echo "$title" | sed 's/[._-]*WEB[._-]*/ /gi')
-    title=$(echo "$title" | sed 's/[._-]*WEB-DL[._-]*/ /gi')
-    title=$(echo "$title" | sed 's/[._-]*BluRay[._-]*/ /gi')
-    title=$(echo "$title" | sed 's/[._-]*BDRip[._-]*/ /gi')
-    
-    # Remove audio info
-    title=$(echo "$title" | sed 's/[._-]*AAC[._-]*/ /gi')
-    title=$(echo "$title" | sed 's/[._-]*AC3[._-]*/ /gi')
+    # Remove technical abbreviations that survived
+    title=$(echo "$title" | sed -E 's/(^|[._ -])(DL|DDP?)([._ -]|$)/\1\3/Ig')
     
     # Remove common tags as whole words
-    title=$(echo "$title" | sed 's/\bFIXED\b//gi')
-    title=$(echo "$title" | sed 's/\bREPACK\b//gi')
-    title=$(echo "$title" | sed 's/\bPROPER\b//gi')
-    
-    # Remove release group patterns (like -GroupName at end)
-    title=$(echo "$title" | sed 's/-[A-Za-z][A-Za-z0-9]*$//')
+    title=$(echo "$title" | sed 's/\b\(FIXED\|REPACK\|PROPER\|INTERNAL\|EXTENDED\|UNCUT\|DIRECTORS\|CUT\)\b//gi')
     
     # Remove file extensions
     title=$(echo "$title" | sed 's/\.mkv$//i')
     title=$(echo "$title" | sed 's/\.mp4$//i')
     title=$(echo "$title" | sed 's/\.avi$//i')
     
-    # Normalize spacing
+    # Normalize spacing and punctuation
     title=$(echo "$title" | sed 's/[._]/ /g')
     title=$(echo "$title" | sed 's/  */ /g')
+    title=$(echo "$title" | sed 's/^ *//; s/ *$//')
+    
+    # Remove trailing numbers that might be leftover from cleaning
+    title=$(echo "$title" | sed 's/ [0-9][0-9]*$//g')
     title=$(echo "$title" | sed 's/^ *//; s/ *$//')
     
     echo "$title"
@@ -252,7 +242,7 @@ get_episode_title() {
     # Start with just the filename without extension
     title="${filename%.*}"
     
-    # Remove season/episode patterns
+    # Remove season/episode patterns first
     title=$(echo "$title" | sed "s/[Ss][0-9][0-9]*[Ee][0-9][0-9]*[._-]*//")
     title=$(echo "$title" | sed "s/[0-9][0-9]*x[0-9][0-9]*[._-]*//")
     
@@ -266,27 +256,48 @@ get_episode_title() {
         title=$(echo "$title" | sed "s/^${series_no_year} *//i" 2>/dev/null || echo "$title")
     fi
     
-    # Now we should have something like "The Girl In The Fireplace (ws.pdtv.xvid-gothic.[VTV])"
-    # Extract the actual title before the parentheses
-    local actual_title=""
-    if [[ $title =~ ^([^(]+)\() ]]; then
-        # There is text before parentheses – that is our title
-        actual_title="${BASH_REMATCH[1]}"
-    elif [[ "$title" =~ ^\(([^\)]+)\) ]]; then
-        # The whole thing is in parentheses – check if it is a title
-        local paren_content="${BASH_REMATCH[1]}"
-        # Check if it looks like technical info
-        if [[ ! "$paren_content" =~ ^(ws|pdtv|xvid|REPACK|WS|PDTV|XviD|gothic|GOTHiC) ]]; then
-            actual_title="$paren_content"
-        fi
-    else
-        # No parentheses, use the whole thing
-        actual_title="$title"
+    # SIMPLIFIED: Find where technical metadata starts and cut there
+    # Technical metadata in these files starts with quality indicators
+    local clean_title=""
+    
+    # Look for the first quality indicator and cut everything before it
+    if [[ "$title" =~ ^(.+)\.(720p|1080p|2160p|4K|480p|576p) ]]; then
+        clean_title="${BASH_REMATCH[1]}"
+        print_verbose "Found quality boundary at '${BASH_REMATCH[2]}', title: '$clean_title'"
+    # Fallback to other common first indicators if no quality found
+    elif [[ "$title" =~ ^(.+)\.(WEB-DL|BluRay|BDRip|HDTV) ]]; then
+        clean_title="${BASH_REMATCH[1]}"
+        print_verbose "Found source boundary at '${BASH_REMATCH[2]}', title: '$clean_title'"
+    elif [[ "$title" =~ ^(.+)\.(AMZN|NFLX|HULU) ]]; then
+        clean_title="${BASH_REMATCH[1]}"
+        print_verbose "Found platform boundary at '${BASH_REMATCH[2]}', title: '$clean_title'"
     fi
     
-    # Use the extracted title or fallback to original
-    if [[ -n "$actual_title" ]]; then
-        title="$actual_title"
+    # If we found a boundary, use that; otherwise keep the whole thing
+    if [[ -n "$clean_title" && ${#clean_title} -gt 2 ]]; then
+        title="$clean_title"
+        print_verbose "Using boundary-detected title: '$title'"
+    else
+        print_verbose "No technical boundary found, using full title: '$title'"
+    fi
+    
+    # RESTORED: Enhanced parentheses-aware title parsing
+    # Handle parentheses intelligently before other cleaning
+    if [[ "$title" =~ ^([^\(]+)\( ]]; then
+        # There is text before parentheses - use that
+        title="${BASH_REMATCH[1]}"
+    elif [[ "$title" =~ ^\(([^\)]+)\)$ ]]; then
+        # The whole thing is in parentheses - check if it is technical
+        local paren_content="${BASH_REMATCH[1]}"
+        case "$paren_content" in
+            ws|pdtv|xvid|repack|proper|internal|web|h264|x264|x265|hevc|hdtv|bdrip|brip|gothic|fov|rarbg)
+                # Technical content, ignore it
+                ;;
+            *)
+                # Looks like a real title
+                title="$paren_content"
+                ;;
+        esac
     fi
     
     # Remove year at the beginning of the title
@@ -299,15 +310,14 @@ get_episode_title() {
     title=$(echo "$title" | sed "s/^[12][0-9][0-9][0-9][[:space:]]*//") 
     
     # Final cleanup of common tags that might have survived
-    title=$(echo "$title" | sed "s/\bFIXED\b//gi")
-    title=$(echo "$title" | sed "s/\bREPACK\b//gi")
+    title=$(echo "$title" | sed "s/\b\(FIXED\|REPACK\|PROPER\|INTERNAL\)\b//gi")
     title=$(echo "$title" | sed "s/  */ /g")
     title=$(echo "$title" | sed "s/^ *//; s/ *$//")
     
-    # Check if we have a meaningful title
+    # EXPANDED: Check if we have a meaningful title (includes more release groups)
     if [[ ${#title} -lt 3 ]] || \
        [[ "$title" =~ ^[0-9.-]+$ ]] || \
-       [[ "$title" =~ ^(WEB|H264|x264|x265|HEVC|pdtv|ws|FIXED|REPACK|gothic|GOTHiC)$ ]]; then
+       [[ "$title" =~ ^(WEB|H264|X264|X265|HEVC|HDTV|AMZN|DL|DDP|AAC|AC3|GOTHIC|RARBG|FOV|PROPER|REPACK|INTERNAL|VIETNAM)$ ]]; then
         echo ""
     else
         echo "$title"

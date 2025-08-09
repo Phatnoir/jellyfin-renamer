@@ -2,7 +2,7 @@
 
 # Universal Media Renamer for Jellyfin/Plex - Fixed Edition
 # Fixed title extraction and year handling for complex filenames
-# Usage: ./rename_fixed.sh [options] [path]
+# Usage: ./rename.sh [options] [path]
 
 set -u
 shopt -s nocaseglob
@@ -313,6 +313,9 @@ get_episode_title() {
     title=$(echo "$title" | sed "s/\b\(FIXED\|REPACK\|PROPER\|INTERNAL\)\b//gi")
     title=$(echo "$title" | sed "s/  */ /g")
     title=$(echo "$title" | sed "s/^ *//; s/ *$//")
+	
+	# Remove leading/trailing dashes and spaces that might cause double dashes
+	title=$(echo "$title" | sed 's/^[- ]*//; s/[- ]*$//')
     
     # EXPANDED: Check if we have a meaningful title (includes more release groups)
     if [[ ${#title} -lt 3 ]] || \

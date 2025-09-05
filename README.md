@@ -11,6 +11,8 @@ A smart, cross-platform Bash script that renames TV show files so they work perf
 
 ## Recent Improvements
 
+* **NEW**: Added anime/fansub support with `--anime` flag
+* **NEW**: Support for anime naming patterns like `[Group] Show - 01 [Quality]`
 * Enhanced episode title extraction using quality/source boundary detection
 * Improved technical metadata removal with precise pattern matching
 * More robust handling of complex filename structures
@@ -28,6 +30,9 @@ chmod +x rename.sh
 # Preview renames (safe)
 ./rename.sh --dry-run "/path/to/TV Shows/Breaking Bad (2008)"
 
+# For anime/fansub releases
+./rename.sh --anime --dry-run "/path/to/Anime/Cyberpunk Edgerunners (2022)"
+
 # Apply renames (once you're happy)
 ./rename.sh "/path/to/TV Shows/Breaking Bad (2008)"
 ```
@@ -36,7 +41,8 @@ chmod +x rename.sh
 
 ## Features
 
-* Detects multiple episode naming patterns (`S01E01`, `1x01`, etc.)
+* **Dual Format Support**: Standard TV shows AND anime/fansub releases
+* Detects multiple episode naming patterns (`S01E01`, `1x01`, `- 01 [Quality]`)
 * Extracts series names from folder structure automatically
 * Separates episode titles from technical metadata via boundary detection
 * Strips codec info, quality tags, and release group names with precision
@@ -44,6 +50,19 @@ chmod +x rename.sh
 * Works on Linux, macOS, and Windows (via WSL)
 * Renames subtitle files to match episode names
 * Runs safely with dry-run mode and validation checks
+
+---
+
+## Supported Episode Patterns
+
+### Standard TV Shows
+- `S01E01`, `S1E1` - Standard season/episode format
+- `1x01`, `01x01` - Alternative season x episode format
+
+### Anime/Fansub Releases
+- `[Group] Show - 01 [Quality]` - Common fansub format
+- `Show - 01 [Metadata]` - Simplified anime format
+- Works with groups like `[Erai-raws]`, `[SubsPlease]`, `[HorribleSubs]`, etc.
 
 ---
 
@@ -60,7 +79,7 @@ chmod +x rename.sh
 
 **IMPORTANT**: This script works best with properly organized TV show folders. Each show should have its own folder:
 
-### Recommended Structure
+### Recommended Structure (Standard TV)
 ```
 TV Shows/
 ├── Breaking Bad (2008)/
@@ -77,6 +96,18 @@ TV Shows/
 └── 3 Body Problem (2024)/
     └── Season 1/
         └── episode files...
+```
+
+### Anime Structure
+```
+Anime/
+├── Cyberpunk Edgerunners (2022)/
+│   ├── [Erai-raws] Cyberpunk - Edgerunners - 01 [1080p][Multiple Subtitle].mkv
+│   ├── [Erai-raws] Cyberpunk - Edgerunners - 02 [1080p][Multiple Subtitle].mkv
+│   └── [Erai-raws] Cyberpunk - Edgerunners - 03 [1080p][Multiple Subtitle].mkv
+└── Attack on Titan (2013)/
+    ├── [SubsPlease] Attack on Titan - 01 [1080p].mkv
+    └── [SubsPlease] Attack on Titan - 02 [1080p].mkv
 ```
 
 ### Also Works (Show folder without season subfolders)
@@ -115,6 +146,18 @@ for show in "/path/to/TV Shows"/*; do
 done
 ```
 
+### Anime/Fansub Usage
+```bash
+# Process anime with anime mode (prioritizes anime patterns)
+./rename.sh --anime --dry-run "/path/to/Anime/Cyberpunk Edgerunners (2022)"
+
+# Anime with custom format
+./rename.sh --anime --format "Show - SxxExx" --dry-run "/path/to/anime"
+
+# Anime with series name override
+./rename.sh --anime --series "Attack on Titan" --dry-run "/path/to/aot-folder"
+```
+
 ### With Series Name Override
 ```bash
 # Manually specify series name
@@ -148,7 +191,7 @@ done
 ./rename.sh --force .
 
 # Combine options
-./rename.sh --format "Show (Year) - SxxExx" --verbose --dry-run "/path/to/shows"
+./rename.sh --anime --format "Show - SxxExx" --verbose --dry-run "/path/to/anime"
 ```
 
 ---
@@ -160,6 +203,7 @@ done
 | `--dry-run`       | Preview changes without making them         |
 | `--verbose`       | Show detailed processing information        |
 | `--force`         | Overwrite existing files (use with caution) |
+| `--anime`         | Enable anime/fansub mode (prioritizes anime patterns) |
 | `--series "Name"` | Manually specify series name                |
 | `--format FORMAT` | Choose output format (see formats below)   |
 | `--help`, `-h`    | Show help message                           |
@@ -178,6 +222,7 @@ Breaking Bad (2008) - S01E02.mkv
 ```
 3 Body Problem - S01E01.mkv
 Breaking Bad - S01E02.mkv
+Cyberpunk Edgerunners - S01E01.mkv  # Good for anime
 ```
 
 ### `Show - SxxExx - Title`
@@ -202,7 +247,7 @@ S01E02.mkv
 
 ## What It Does
 
-### Before (properly organized folder)
+### Before (Standard TV - properly organized folder)
 ```
 Breaking Bad (2008)/
 ├── Season 1/
@@ -222,6 +267,22 @@ Breaking Bad (2008)/
     └── Breaking Bad (2008) - S02E01.mkv
 ```
 
+### Before (Anime/Fansub)
+```
+Cyberpunk Edgerunners (2022)/
+├── [Erai-raws] Cyberpunk - Edgerunners - 01 [1080p][Multiple Subtitle][ABC123].mkv
+├── [Erai-raws] Cyberpunk - Edgerunners - 02 [1080p][Multiple Subtitle][DEF456].mkv
+└── [Erai-raws] Cyberpunk - Edgerunners - 03 [1080p][Multiple Subtitle][GHI789].mkv
+```
+
+### After (using `--anime --format "Show - SxxExx"`)
+```
+Cyberpunk Edgerunners (2022)/
+├── Cyberpunk Edgerunners - S01E01.mkv
+├── Cyberpunk Edgerunners - S01E02.mkv
+└── Cyberpunk Edgerunners - S01E03.mkv
+```
+
 ### With Episode Titles (using `--format "Show - SxxExx - Title"`)
 ```
 Breaking Bad (2008)/
@@ -232,14 +293,6 @@ Breaking Bad (2008)/
     └── Breaking Bad - S02E01 - Seven Thirty-Seven.mkv
 ```
 
-### Complex Example (Doctor Who with technical metadata)
-```
-Doctor Who (2005)/
-└── Season 5/
-    ├── Doctor.Who.2005.S05E04.Time.Of.The.Angels.HDTV.XviD-FoV.avi
-    └── Doctor Who (2005) - S05E04 - Time Of The Angels.avi  # After renaming
-```
-
 ---
 
 ## Auto-Detection Features
@@ -248,7 +301,8 @@ The script automatically:
 
 - **Detects series name** from folder structure (e.g., "3 Body Problem (2024)" → "3 Body Problem")
 - **Preserves years** when using appropriate formats
-- **Recognizes episode patterns**: `S01E01`, `S1E1`, `1x01`, `01x01`
+- **Recognizes episode patterns**: `S01E01`, `S1E1`, `1x01`, `01x01`, `- 01 [Quality]`
+- **Handles anime/fansub formats**: Detects `[Group] Show - Episode [Metadata]` patterns
 - **Intelligently extracts episode titles** using boundary detection to separate titles from technical metadata
 - **Cleans filenames** by removing:
   - Quality indicators (720p, 1080p, 4K, etc.)
@@ -256,7 +310,29 @@ The script automatically:
   - Source tags (WEB, WEB-DL, BluRay, BDRip, HDTV)
   - Audio info (AAC, AC3, DTS)
   - Platform tags (AMZN, NFLX, HULU, etc.)
-  - Release group names (like "StereotypedGazelleOfWondrousPassion")
+  - Release group names and fansub group tags
+  - Hash codes in anime releases (like `[ABC123]`)
+
+---
+
+## Anime Mode (`--anime`)
+
+When you use the `--anime` flag, the script:
+
+- **Prioritizes anime patterns** like `- 01 [Quality]` over standard TV patterns
+- **Defaults season to 01** for single-season anime shows
+- **Changes default format** to `"Show - SxxExx"` (no episode titles, cleaner for anime)
+- **Handles fansub groups** like `[Erai-raws]`, `[SubsPlease]`, `[HorribleSubs]`
+- **Removes hash codes** and complex metadata brackets
+- **Works with various anime naming conventions**
+
+### When to Use Anime Mode
+
+Use `--anime` when processing:
+- Fansub releases with `[Group]` tags
+- Files with `- 01 [Quality]` episode numbering
+- Anime that doesn't follow standard `S01E01` patterns
+- Shows where you want cleaner, episode-title-free naming
 
 ---
 
@@ -265,6 +341,7 @@ The script automatically:
 The script uses advanced parsing to cleanly extract episode titles:
 
 - **Boundary Detection**: Identifies where technical metadata begins (e.g., at quality indicators like "720p")
+- **Anime-Aware Parsing**: Handles bracket structures in fansub releases
 - **Smart Cleaning**: Removes series names, years, and technical tags while preserving actual episode titles
 - **Edge Case Handling**: Properly handles parentheses, brackets, and complex filename structures
 - **Fallback Logic**: When clean titles can't be extracted, falls back to episode codes only
@@ -289,6 +366,12 @@ The script uses advanced parsing to cleanly extract episode titles:
 - Verify the path is correct
 - Use `--verbose` to see what the script is detecting
 
+### Episode patterns not detected (anime)
+- **Try `--anime` flag** for fansub releases
+- Check that files follow supported patterns (`- 01 [Quality]`)
+- Use `--verbose` to see which patterns are being tested
+- For unusual formats, consider `--series` override
+
 ### Series name not detected correctly
 - **Ensure proper folder structure**: Each show should have its own folder
 - Use `--series "Exact Series Name"` to override auto-detection
@@ -300,6 +383,7 @@ The script uses advanced parsing to cleanly extract episode titles:
 - The script now uses improved boundary detection for cleaner titles
 - Use `--format "Show - SxxExx"` to avoid including titles if they're still problematic
 - Consider manually specifying `--series` for better cleaning
+- For anime, try `--anime` flag which defaults to no episode titles
 
 ### Permission errors
 - Ensure you have write permissions to the directory
@@ -315,9 +399,10 @@ The script uses advanced parsing to cleanly extract episode titles:
 ./rename.sh --format "Show (Year) - SxxExx" --dry-run "/path/to/office"
 ```
 
-### Anime
+### Anime (with anime mode)
 ```bash
-./rename.sh --format "Show - SxxExx" --series "Attack on Titan" --dry-run "/path/to/aot"
+./rename.sh --anime --dry-run "/path/to/anime/show"
+./rename.sh --anime --format "Show - SxxExx" --series "Attack on Titan" --dry-run "/path/to/aot"
 ```
 
 ### Shows with episode titles
@@ -336,13 +421,15 @@ The script uses advanced parsing to cleanly extract episode titles:
 
 1. **Always use `--dry-run` first** to preview changes
 2. **Organize shows properly**: Each show should have its own folder before running the script
-3. **Use `--verbose`** when troubleshooting or understanding the parsing process
-4. **Start with `"Show (Year) - SxxExx"` format** - it's the most compatible
-5. **Specify `--series`** if auto-detection isn't working well
-6. **Process shows individually** rather than running on a mixed folder
-7. **Make backups** of important collections before running
-8. **Test on a small subset** before processing large collections
-9. **Episode titles work best** with files that have clear technical metadata boundaries
+3. **Use `--anime` for fansub releases** and anime with non-standard naming
+4. **Use `--verbose`** when troubleshooting or understanding the parsing process
+5. **Start with `"Show (Year) - SxxExx"` format** for TV shows - it's the most compatible
+6. **Use `"Show - SxxExx"` format for anime** - cleaner and more appropriate
+7. **Specify `--series`** if auto-detection isn't working well
+8. **Process shows individually** rather than running on a mixed folder
+9. **Make backups** of important collections before running
+10. **Test on a small subset** before processing large collections
+11. **Episode titles work best** with files that have clear technical metadata boundaries
 
 ---
 

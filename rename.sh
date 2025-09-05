@@ -18,6 +18,7 @@ FORCE=false
 SERIES_NAME=""
 BASE_PATH="."
 OUTPUT_FORMAT="Show - SxxExx - Title"
+ANIME_MODE=false
 
 # Supported video extensions
 VIDEO_EXTENSIONS="mkv|mp4|avi|m4v|mov|wmv|flv|webm|ts|m2ts"
@@ -55,6 +56,7 @@ Options:
   --dry-run           Show what would be renamed without making changes
   --verbose           Show detailed processing information
   --force             Overwrite existing files (use with caution)
+  --anime             Enable anime/fansub mode (prioritizes anime naming patterns)
   --series "Name"     Specify series name (auto-detected if not provided)
   --format FORMAT     Output format (default: "Show - SxxExx - Title")
                       Options: 
@@ -73,13 +75,26 @@ Examples:
   $0 --dry-run .
   $0 --series "Doctor Who (2005)" --dry-run /path/to/shows
   $0 --format "Show (Year) - SxxExx - Title" --dry-run .
+  $0 --anime --dry-run /path/to/anime/show
+  $0 --anime --format "Show - SxxExx" --dry-run .
+
+Supported Episode Patterns:
+  Standard TV Shows:    S01E01, S1E1, 1x01, 01x01
+  Anime/Fansub:         [Group] Show - 01 [Quality], Show - 01 [Metadata]
 
 The script will:
 1. Auto-detect series name from folder or filenames
 2. Extract episode codes and normalize to S01E01 format
-3. Clean episode titles intelligently
-4. Use appropriate format based on available information
-5. Handle special characters and edge cases safely
+3. Support both standard TV and anime/fansub naming conventions
+4. Clean episode titles intelligently
+5. Use appropriate format based on available information
+6. Handle special characters and edge cases safely
+
+Anime Mode (--anime):
+  - Prioritizes anime naming patterns (- 01 [Quality])
+  - Defaults season to 01 for single-season shows
+  - Changes default format to "Show - SxxExx" (no episode titles)
+  - Works with fansub releases like [Erai-raws], [SubsPlease], etc.
 EOF
 }
 
@@ -142,21 +157,55 @@ get_season_episode() {
     local season=""
     local episode=""
     
-    # Pattern 1: S01E01, S1E1, etc.
-    if [[ "$filename" =~ [Ss]([0-9]{1,2})[Ee]([0-9]{1,2}) ]]; then
-        season="${BASH_REMATCH[1]}"
-        episode="${BASH_REMATCH[2]}"
+    # In anime mode, try anime patterns first
+    if [[ "$ANIME_MODE" == true ]]; then
+        # Pattern: Anime/fansub style - " - 01 [" or " - 001 [" 
+        if [[ "$filename" =~ -[[:space:]]+([0-9]{1,3})[[:space:]]*\[ ]]; then
+            season="01"
+            episode="${BASH_REMATCH[1]}"
+            print_verbose "Detected anime-style episode pattern: - ${episode} ["
+        # More general anime pattern - " - 01." or " - 01 "
+        elif [[ "$filename" =~ -[[:space:]]+([0-9]{1,3})[[:space:]]*[\.\[] ]]; then
+            season="01"
+            episode="${BASH_REMATCH[1]}"
+            print_verbose "Detected general anime episode pattern: - ${episode}"
+        fi
+    fi
     
-    # Pattern 2: 1x01, 01x01, etc.
-    elif [[ "$filename" =~ ([0-9]{1,2})x([0-9]{1,2}) ]]; then
-        season="${BASH_REMATCH[1]}"
-        episode="${BASH_REMATCH[2]}"
+    # Standard patterns (always try these if anime patterns didn't match)
+    if [[ -z "$season" || -z "$episode" ]]; then
+        # Pattern 1: S01E01, S1E1, etc.
+        if [[ "$filename" =~ [Ss]([0-9]{1,2})[Ee]([0-9]{1,2}) ]]; then
+            season="${BASH_REMATCH[1]}"
+            episode="${BASH_REMATCH[2]}"
+        
+        # Pattern 2: 1x01, 01x01, etc.
+        elif [[ "$filename" =~ ([0-9]{1,2})x([0-9]{1,2}) ]]; then
+            season="${BASH_REMATCH[1]}"
+            episode="${BASH_REMATCH[2]}"
+        
+        # If not in anime mode, try anime patterns as fallback
+        elif [[ "$ANIME_MODE" == false ]]; then
+            # Pattern 3: Anime/fansub style - " - 01 [" or " - 001 [" 
+            if [[ "$filename" =~ -[[:space:]]+([0-9]{1,3})[[:space:]]*\[ ]]; then
+                season="01"
+                episode="${BASH_REMATCH[1]}"
+                print_verbose "Detected anime-style episode pattern: - ${episode} ["
+            # Pattern 4: More general anime pattern - " - 01." or " - 01 "
+            elif [[ "$filename" =~ -[[:space:]]+([0-9]{1,3})[[:space:]]*[\.\[] ]]; then
+                season="01"
+                episode="${BASH_REMATCH[1]}"
+                print_verbose "Detected general anime episode pattern: - ${episode}"
+            fi
+        fi
     fi
     
     # Zero-pad season and episode
     if [[ -n "$season" && -n "$episode" ]]; then
         [[ ${#season} -eq 1 ]] && season="0$season"
         [[ ${#episode} -eq 1 ]] && episode="0$episode"
+        # Handle 3-digit episodes like 001 -> 001 (keep as-is)
+        [[ ${#episode} -eq 3 ]] && episode="$episode"
         echo "S${season}E${episode}"
     else
         echo ""
@@ -624,6 +673,11 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         --dry-run)
             DRY_RUN=true
+            shift
+            ;;
+		--anime)
+            ANIME_MODE=true
+            [[ "$OUTPUT_FORMAT" == "Show - SxxExx - Title" ]] && OUTPUT_FORMAT="Show - SxxExx"
             shift
             ;;
         --verbose)

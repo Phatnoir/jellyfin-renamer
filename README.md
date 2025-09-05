@@ -11,13 +11,15 @@ A smart, cross-platform Bash script that renames TV show files so they work perf
 
 ## Recent Improvements
 
+* **NEW**: Enhanced title extraction with intelligent boundary detection
+* **NEW**: Improved technical metadata removal with precise pattern matching
+* **NEW**: Better handling of parenthetical content (preserves meaningful ones, removes technical)
 * **NEW**: Added anime/fansub support with `--anime` flag
 * **NEW**: Support for anime naming patterns like `[Group] Show - 01 [Quality]`
-* Enhanced episode title extraction using quality/source boundary detection
-* Improved technical metadata removal with precise pattern matching
-* More robust handling of complex filename structures
+* More robust handling of complex filename structures and edge cases
 * Better series name cleaning and normalization
 * Added subtitle file support with language code preservation
+* Fixed release group removal to handle both uppercase and lowercase groups
 
 ---
 
@@ -42,9 +44,10 @@ chmod +x rename.sh
 ## Features
 
 * **Dual Format Support**: Standard TV shows AND anime/fansub releases
+* **Intelligent Title Extraction**: Uses boundary detection to separate episode titles from technical metadata
+* **Parenthetical handling**: Preserves meaningful parenthetical content like "(Part 1)" or "(Director's Cut)" while stripping technical tags like "(1080p BluRay x265)"
 * Detects multiple episode naming patterns (`S01E01`, `1x01`, `- 01 [Quality]`)
 * Extracts series names from folder structure automatically
-* Separates episode titles from technical metadata via boundary detection
 * Strips codec info, quality tags, and release group names with precision
 * Supports multiple output formats, including year preservation
 * Works on Linux, macOS, and Windows (via WSL)
@@ -169,10 +172,13 @@ done
 
 ### Different Output Formats
 ```bash
-# Show with year (recommended)
+# Show with year (recommended for TV shows)
 ./rename.sh --format "Show (Year) - SxxExx" --dry-run .
 
-# Show without year
+# Show with year and episode titles
+./rename.sh --format "Show (Year) - SxxExx - Title" --dry-run .
+
+# Show without year (good for anime)
 ./rename.sh --format "Show - SxxExx" --dry-run .
 
 # Just episode codes
@@ -212,32 +218,38 @@ done
 
 ## Output Formats
 
-### `Show (Year) - SxxExx` (Recommended)
+### `Show (Year) - SxxExx - Title` (Recommended for TV shows with episode titles)
+```
+Breaking Bad (2008) - S01E01 - Pilot.mkv
+Breaking Bad (2008) - S01E02 - Cat's in the Bag.mkv
+```
+
+### `Show (Year) - SxxExx` (Clean format with year)
 ```
 3 Body Problem (2024) - S01E01.mkv
 Breaking Bad (2008) - S01E02.mkv
 ```
 
-### `Show - SxxExx`
-```
-3 Body Problem - S01E01.mkv
-Breaking Bad - S01E02.mkv
-Cyberpunk Edgerunners - S01E01.mkv  # Good for anime
-```
-
-### `Show - SxxExx - Title`
+### `Show - SxxExx - Title` (Good for shows with episode titles)
 ```
 Breaking Bad - S01E01 - Pilot.mkv
 Breaking Bad - S01E02 - Cat's in the Bag.mkv
 ```
 
-### `SxxExx - Title`
+### `Show - SxxExx` (Recommended for anime)
+```
+3 Body Problem - S01E01.mkv
+Breaking Bad - S01E02.mkv
+Cyberpunk Edgerunners - S01E01.mkv
+```
+
+### `SxxExx - Title` (Episode-focused with titles)
 ```
 S01E01 - Pilot.mkv
 S01E02 - Cat's in the Bag.mkv
 ```
 
-### `SxxExx`
+### `SxxExx` (Minimal format)
 ```
 S01E01.mkv
 S01E02.mkv
@@ -283,14 +295,14 @@ Cyberpunk Edgerunners (2022)/
 └── Cyberpunk Edgerunners - S01E03.mkv
 ```
 
-### With Episode Titles (using `--format "Show - SxxExx - Title"`)
+### With Episode Titles (using `--format "Show (Year) - SxxExx - Title"`)
 ```
 Breaking Bad (2008)/
 ├── Season 1/
-│   ├── Breaking Bad - S01E01 - Pilot.mkv
-│   └── Breaking Bad - S01E02 - Cat's in the Bag.mkv
+│   ├── Breaking Bad (2008) - S01E01 - Pilot.mkv
+│   └── Breaking Bad (2008) - S01E02 - Cat's in the Bag.mkv
 └── Season 2/
-    └── Breaking Bad - S02E01 - Seven Thirty-Seven.mkv
+    └── Breaking Bad (2008) - S02E01 - Seven Thirty-Seven.mkv
 ```
 
 ---
@@ -304,14 +316,16 @@ The script automatically:
 - **Recognizes episode patterns**: `S01E01`, `S1E1`, `1x01`, `01x01`, `- 01 [Quality]`
 - **Handles anime/fansub formats**: Detects `[Group] Show - Episode [Metadata]` patterns
 - **Intelligently extracts episode titles** using boundary detection to separate titles from technical metadata
+- **Preserves meaningful parenthetical content** like "(Part 1)", "(Extended Cut)", "(Director's Cut)" while removing technical metadata
 - **Cleans filenames** by removing:
   - Quality indicators (720p, 1080p, 4K, etc.)
   - Codec info (x264, x265, HEVC, H264)
   - Source tags (WEB, WEB-DL, BluRay, BDRip, HDTV)
   - Audio info (AAC, AC3, DTS)
   - Platform tags (AMZN, NFLX, HULU, etc.)
-  - Release group names and fansub group tags
+  - Release group names and fansub group tags (both uppercase and lowercase)
   - Hash codes in anime releases (like `[ABC123]`)
+  - Technical abbreviations and tags
 
 ---
 
@@ -341,8 +355,9 @@ Use `--anime` when processing:
 The script uses advanced parsing to cleanly extract episode titles:
 
 - **Boundary Detection**: Identifies where technical metadata begins (e.g., at quality indicators like "720p")
+- **Smart Parenthetical Handling**: Preserves meaningful content like "(Part 1)" while removing technical metadata
 - **Anime-Aware Parsing**: Handles bracket structures in fansub releases
-- **Smart Cleaning**: Removes series names, years, and technical tags while preserving actual episode titles
+- **Enhanced Cleaning**: Removes series names, years, and technical tags while preserving actual episode titles
 - **Edge Case Handling**: Properly handles parentheses, brackets, and complex filename structures
 - **Fallback Logic**: When clean titles can't be extracted, falls back to episode codes only
 
@@ -399,6 +414,11 @@ The script uses advanced parsing to cleanly extract episode titles:
 ./rename.sh --format "Show (Year) - SxxExx" --dry-run "/path/to/office"
 ```
 
+### Standard TV Show with Episode Titles
+```bash
+./rename.sh --format "Show (Year) - SxxExx - Title" --dry-run "/path/to/office"
+```
+
 ### Anime (with anime mode)
 ```bash
 ./rename.sh --anime --dry-run "/path/to/anime/show"
@@ -423,13 +443,14 @@ The script uses advanced parsing to cleanly extract episode titles:
 2. **Organize shows properly**: Each show should have its own folder before running the script
 3. **Use `--anime` for fansub releases** and anime with non-standard naming
 4. **Use `--verbose`** when troubleshooting or understanding the parsing process
-5. **Start with `"Show (Year) - SxxExx"` format** for TV shows - it's the most compatible
+5. **Start with `"Show (Year) - SxxExx"` format** for TV shows - it's very compatible
 6. **Use `"Show - SxxExx"` format for anime** - cleaner and more appropriate
-7. **Specify `--series`** if auto-detection isn't working well
-8. **Process shows individually** rather than running on a mixed folder
-9. **Make backups** of important collections before running
-10. **Test on a small subset** before processing large collections
-11. **Episode titles work best** with files that have clear technical metadata boundaries
+7. **Try `"Show (Year) - SxxExx - Title"` for shows with good episode titles**
+8. **Specify `--series`** if auto-detection isn't working well
+9. **Process shows individually** rather than running on a mixed folder
+10. **Make backups** of important collections before running
+11. **Test on a small subset** before processing large collections
+12. **The script preserves meaningful parenthetical content** like "(Part 1)" while removing technical metadata
 
 ---
 

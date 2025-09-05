@@ -43,7 +43,7 @@ print_status() {
 }
 
 print_verbose() {
-    [[ "$VERBOSE" == true ]] && print_status "$CYAN" "  [VERBOSE] $1"
+    [[ "$VERBOSE" == true ]] && print_status "$CYAN" "  [VERBOSE] $1" >&2
 }
 
 usage() {
@@ -249,11 +249,8 @@ clean_title() {
     # Restore missing ws cleanup
     title=$(echo "$title" | sed 's/[._-]*ws[._-]*/ /gi')
     
-    # Remove everything in parentheses EXCEPT if it's the entire title
-    # This preserves titles like "(Part 1)" when that's all we have
-    if [[ ! "$title" =~ ^\([^\)]+\)$ ]]; then
-        title=$(echo "$title" | sed 's/([^)]*)//g')
-    fi
+    # Remove only technical parentheses, preserve meaningful ones
+	title=$(echo "$title" | sed 's/([^)]*\(720p\|1080p\|2160p\|4K\|480p\|576p\|x264\|x265\|HEVC\|BluRay\|WEB\|HDTV\)[^)]*)//gi')
     title=$(echo "$title" | sed 's/\[[^]]*\]//g')
     
     # FIXED: Better release group removal (case-insensitive, handles lowercase)
@@ -303,20 +300,35 @@ get_episode_title() {
         title=$(echo "$title" | sed "s/^${series_no_year} [12][0-9][0-9][0-9] *//i" 2>/dev/null || echo "$title")
         # Remove just series name
         title=$(echo "$title" | sed "s/^${series_no_year} *//i" 2>/dev/null || echo "$title")
+		# If we ended up with a leading "(YYYY) - - " or "(YYYY) - ", drop it
+		title=$(echo "$title" | sed -E 's/^\([12][0-9]{3}\)[[:space:]]*-[[:space:]]*-[[:space:]]*//')
+		title=$(echo "$title" | sed -E 's/^\([12][0-9]{3}\)[[:space:]]*-[[:space:]]*//')
+		# If we ended up with a leading "- - " (no year), drop that too
+		title=$(echo "$title" | sed -E 's/^[[:space:]]*-[[:space:]]*-[[:space:]]*//')
+		# De-dupe any remaining internal double separators → single " - "
+		title=$(echo "$title" | sed -E 's/[[:space:]]*-[[:space:]]*-[[:space:]]*/ - /g')
     fi
     
-    # SIMPLIFIED: Find where technical metadata starts and cut there
-    # Technical metadata in these files starts with quality indicators
+    # IMPROVED: Better boundary detection that handles parentheses
     local clean_title=""
     
-    # Look for the first quality indicator and cut everything before it
+    # Look for quality indicators with dot separator (original working pattern)
     if [[ "$title" =~ ^(.+)\.(720p|1080p|2160p|4K|480p|576p) ]]; then
         clean_title="${BASH_REMATCH[1]}"
         print_verbose "Found quality boundary at '${BASH_REMATCH[2]}', title: '$clean_title'"
-    # Fallback to other common first indicators if no quality found
-    elif [[ "$title" =~ ^(.+)\.(WEB-DL|BluRay|BDRip|HDTV) ]]; then
+    # Look for quality indicators with space and opening parenthesis
+    elif [[ "$title" =~ ^(.+)[[:space:]]+\((720p|1080p|2160p|4K|480p|576p) ]]; then
         clean_title="${BASH_REMATCH[1]}"
-        print_verbose "Found source boundary at '${BASH_REMATCH[2]}', title: '$clean_title'"
+        print_verbose "Found quality boundary at '${BASH_REMATCH[2]}', title: '$clean_title'"
+    # Look for other technical indicators with dot
+    elif [[ "$title" =~ ^(.+)\.(WEB-DL|BluRay|BDRip|HDTV|x264|x265|HEVC) ]]; then
+        clean_title="${BASH_REMATCH[1]}"
+        print_verbose "Found technical boundary at '${BASH_REMATCH[2]}', title: '$clean_title'"
+    # Look for other technical indicators with space and parenthesis
+    elif [[ "$title" =~ ^(.+)[[:space:]]+\((WEB-DL|BluRay|BDRip|HDTV|x264|x265|HEVC) ]]; then
+        clean_title="${BASH_REMATCH[1]}"
+        print_verbose "Found technical boundary at '${BASH_REMATCH[2]}', title: '$clean_title'"
+    # Look for platform indicators
     elif [[ "$title" =~ ^(.+)\.(AMZN|NFLX|HULU) ]]; then
         clean_title="${BASH_REMATCH[1]}"
         print_verbose "Found platform boundary at '${BASH_REMATCH[2]}', title: '$clean_title'"
@@ -330,24 +342,11 @@ get_episode_title() {
         print_verbose "No technical boundary found, using full title: '$title'"
     fi
     
-    # RESTORED: Enhanced parentheses-aware title parsing
-    # Handle parentheses intelligently before other cleaning
-    if [[ "$title" =~ ^([^\(]+)\( ]]; then
-        # There is text before parentheses - use that
-        title="${BASH_REMATCH[1]}"
-    elif [[ "$title" =~ ^\(([^\)]+)\)$ ]]; then
-        # The whole thing is in parentheses - check if it is technical
-        local paren_content="${BASH_REMATCH[1]}"
-        case "$paren_content" in
-            ws|pdtv|xvid|repack|proper|internal|web|h264|x264|x265|hevc|hdtv|bdrip|brip|gothic|fov|rarbg)
-                # Technical content, ignore it
-                ;;
-            *)
-                # Looks like a real title
-                title="$paren_content"
-                ;;
-        esac
-    fi
+    # Only strip a trailing (...) if it looks technical
+	if [[ "$title" =~ ^(.+)[[:space:]]+\((WEB|BluRay|BDRip|HDTV|PDTV|DVDRip|AMZN|NFLX|HULU|DSNP|MAX|x264|x265|HEVC|AAC|AC3|DDP|DTS|PROPER|REPACK|INTERNAL) ]]; then
+		title="${BASH_REMATCH[1]}"
+		print_verbose "Removed technical parenthetical block"
+	fi
     
     # Remove year at the beginning of the title
     title=$(echo "$title" | sed "s/^[12][0-9][0-9][0-9][[:space:]]*//") 
@@ -366,7 +365,31 @@ get_episode_title() {
 	# Remove leading/trailing dashes and spaces that might cause double dashes
 	title=$(echo "$title" | sed 's/^[- ]*//; s/[- ]*$//')
     
-    # EXPANDED: Check if we have a meaningful title (includes more release groups)
+    # Remove any trailing parenthetical content that survived - BUT preserve meaningful ones
+    # First, temporarily mark meaningful parentheses to protect them
+    title=$(echo "$title" | sed 's/(\([0-9]\+\))$/KEEPNUM\1KEEPNUM/')
+    title=$(echo "$title" | sed 's/(Part \([0-9]\+\))$/KEEPPart\1KEEPPART/')
+    title=$(echo "$title" | sed 's/(Extended Cut)$/KEEPEXTENDEDKEEP/')
+    title=$(echo "$title" | sed 's/(Director[^)]*Cut)$/KEEPDIRECTORKEEP/')
+    title=$(echo "$title" | sed 's/(Final Cut)$/KEEPFINALKEEP/')
+    
+    # Now remove any remaining trailing parentheses (these are technical)
+    title=$(echo "$title" | sed 's/ *([^)]*)$//')
+    
+    # Restore the meaningful parentheses
+    title=$(echo "$title" | sed 's/KEEPNUM\([0-9]\+\)KEEPNUM$/(\1)/')
+    title=$(echo "$title" | sed 's/KEEPPart\([0-9]\+\)KEEPPART$/(Part \1)/')
+    title=$(echo "$title" | sed 's/KEEPEXTENDEDKEEP$/(Extended Cut)/')
+    title=$(echo "$title" | sed "s/KEEPDIRECTORKEEP$/(Director's Cut)/")
+    title=$(echo "$title" | sed 's/KEEPFINALKEEP$/(Final Cut)/')
+    
+    # Final cleanup
+    title=$(echo "$title" | sed 's/^ *//; s/ *$//')
+    
+    # If an unmatched '(' remains at end, drop it and the tail
+    title=$(echo "$title" | sed -E 's/[[:space:]]*\([^)]*$//')
+    
+    # Check if we have a meaningful title
     if [[ ${#title} -lt 3 ]] || \
        [[ "$title" =~ ^[0-9.-]+$ ]] || \
        [[ "$title" =~ ^(WEB|H264|X264|X265|HEVC|HDTV|AMZN|DL|DDP|AAC|AC3|GOTHIC|RARBG|FOV|PROPER|REPACK|INTERNAL|VIETNAM)$ ]]; then

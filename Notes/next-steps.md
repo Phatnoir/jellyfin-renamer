@@ -11,7 +11,26 @@
 
 ## Future Enhancements
 
-### 1. External Episode Database Integration
+### 1. Filename Format Options
+Add configurable output formats to support different media server preferences:
+
+**Proposed formats:**
+- Current: `Show Name - SxxExx - Title.ext` 
+- With year: `Show Name (Year) - SxxExx - Title.ext`
+- Minimal: `Show Name - SxxExx.ext`
+
+**Implementation:**
+- Add `--format` flag with options like `standard`, `with-year`, `minimal`
+- Configuration file support for default format preference
+- Per-show format overrides for mixed libraries
+
+**Use cases:**
+- Better compatibility across different media managers (Plex, Emby, Kodi)
+- Clearer identification when files are moved outside folder structure
+- Consistency preferences across entire media library
+- Legacy system compatibility requirements
+
+### 2. External Episode Database Integration
 Cross-reference episode titles with external APIs for validation and correction:
 
 - **TMDB (The Movie Database)** - Free API with good TV coverage
@@ -29,7 +48,7 @@ Cross-reference episode titles with external APIs for validation and correction:
 - Cache results locally to avoid repeated API calls
 - Fallback gracefully when API is unavailable
 
-### 2. Interactive/Manual Renaming Mode
+### 3. Interactive/Manual Renaming Mode
 Handle edge cases where auto-detection fails:
 
 **Problem files:**
@@ -52,13 +71,13 @@ Suggested: "Doctor Who (2005) - S00E01.mkv"
 Options: [A]ccept, [E]dit, [S]kip, [Q]uit
 ```
 
-### 3. Additional Pattern Recognition
+### 4. Additional Pattern Recognition
 - Better handling of multi-part episodes (Part 1, Part 2)
 - Anime episode numbering patterns
 - Movie/special naming conventions
 - Date-based episode naming (news shows, daily content)
 
-### 4. Quality of Life Improvements
+### 5. Quality of Life Improvements
 - Configuration file support (`.renamerrc`)
 - Batch processing with progress indicators
 - Undo functionality (save rename log for reversal)
@@ -82,3 +101,8 @@ When adding external API features:
 - Handle rate limiting gracefully
 - Provide offline fallback mode
 - Consider privacy implications of API calls
+
+When implementing format options:
+- Maintain backward compatibility with existing scripts
+- Consider file path length limitations on different filesystems
+- Test with various special characters in show names and years

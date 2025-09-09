@@ -11,6 +11,9 @@ A smart, cross-platform Bash script that renames TV show files so they work perf
 
 ## Recent Improvements
 
+* **NEW**: Deep metadata cleanup with `--deep-clean` flag for MKV files
+* **NEW**: Automatic companion file renaming (subtitles, artwork, NFO files)
+* **NEW**: Intelligent permission fixing for read-only files
 * **NEW**: Enhanced title extraction with intelligent boundary detection
 * **NEW**: Improved technical metadata removal with precise pattern matching
 * **NEW**: Better handling of parenthetical content (preserves meaningful ones, removes technical)
@@ -32,6 +35,9 @@ chmod +x rename.sh
 # Preview renames (safe)
 ./rename.sh --dry-run "/path/to/TV Shows/Breaking Bad (2008)"
 
+# With metadata cleanup for MKV files
+./rename.sh --deep-clean --dry-run "/path/to/TV Shows/Breaking Bad (2008)"
+
 # For anime/fansub releases
 ./rename.sh --anime --dry-run "/path/to/Anime/Cyberpunk Edgerunners (2022)"
 
@@ -43,6 +49,9 @@ chmod +x rename.sh
 
 ## Features
 
+* **Deep Metadata Cleanup**: Clean internal MKV container and track metadata with `--deep-clean`
+* **Companion File Management**: Automatically renames subtitles, artwork, and NFO files to match videos
+* **Intelligent Permission Handling**: Automatically fixes read-only file permissions when needed
 * **Dual Format Support**: Standard TV shows AND anime/fansub releases
 * **Intelligent Title Extraction**: Uses boundary detection to separate episode titles from technical metadata
 * **Parenthetical handling**: Preserves meaningful parenthetical content like "(Part 1)" or "(Director's Cut)" while stripping technical tags like "(1080p BluRay x265)"
@@ -190,6 +199,9 @@ done
 
 ### Advanced Options
 ```bash
+# Deep metadata cleanup (cleans internal MKV metadata)
+./rename.sh --deep-clean --dry-run .
+
 # Verbose output for debugging
 ./rename.sh --verbose --dry-run .
 
@@ -197,7 +209,7 @@ done
 ./rename.sh --force .
 
 # Combine options
-./rename.sh --anime --format "Show - SxxExx" --verbose --dry-run "/path/to/anime"
+./rename.sh --anime --deep-clean --format "Show - SxxExx" --verbose --dry-run "/path/to/anime"
 ```
 
 ---
@@ -209,6 +221,7 @@ done
 | `--dry-run`       | Preview changes without making them         |
 | `--verbose`       | Show detailed processing information        |
 | `--force`         | Overwrite existing files (use with caution) |
+| `--deep-clean`    | Clean internal MKV metadata and rename companion files |
 | `--anime`         | Enable anime/fansub mode (prioritizes anime patterns) |
 | `--series "Name"` | Manually specify series name                |
 | `--format FORMAT` | Choose output format (see formats below)   |
@@ -307,6 +320,31 @@ Breaking Bad (2008)/
 
 ---
 
+## Deep Clean Feature (`--deep-clean`)
+
+The `--deep-clean` option provides comprehensive metadata cleanup for MKV files:
+
+### What it cleans:
+- **Container title**: Sets to match your clean filename
+- **Track names**: Removes technical metadata from video/audio/subtitle tracks
+- **Companion files**: Automatically renames .srt, .nfo, .jpg files to match
+
+### Before deep clean (internal MKV metadata):
+```
+Container title: "GalaxyRG265 - Perfect.Blue.1997.JAPANESE.REMASTERED.1080p.BluRay.DDP5.1.x265.10bit-GalaxyRG265"
+Video track: "GalaxyRG265 - Perfect.Blue.1997.JAPANESE.REMASTERED.1080p.BluRay.DDP5.1.x265.10bit-GalaxyRG265"
+Audio track: "Stereo"
+```
+
+### After deep clean:
+```
+Container title: "Breaking Bad (2008) - S01E01 - Pilot"
+Video track: (no title)
+Audio track: (no title)
+```
+
+---
+
 ## Auto-Detection Features
 
 The script automatically:
@@ -370,6 +408,7 @@ The script uses advanced parsing to cleanly extract episode titles:
 - **Dry-run**: Preview all changes before applying
 - **Backup-friendly**: Original files only moved, not copied
 - **Error handling**: Graceful failure with detailed error messages
+- **Permission handling**: Automatically fixes read-only files when possible
 - **Subtitle preservation**: Maintains language codes in subtitle files
 
 ---
@@ -401,9 +440,16 @@ The script uses advanced parsing to cleanly extract episode titles:
 - For anime, try `--anime` flag which defaults to no episode titles
 
 ### Permission errors
+- The script automatically attempts to fix read-only files
 - Ensure you have write permissions to the directory
 - On WSL, check Windows file permissions
 - Try running with appropriate user privileges
+
+### Metadata cleanup not working
+- Ensure MKVToolNix is installed for `--deep-clean` functionality
+- Check that files are actually MKV format (metadata cleanup only works on MKV)
+- Use `--verbose` to see detailed processing information
+- On Windows/WSL: install MKVToolNix **inside WSL** or add the Windows install path to WSL's `PATH`
 
 ---
 
@@ -414,15 +460,15 @@ The script uses advanced parsing to cleanly extract episode titles:
 ./rename.sh --format "Show (Year) - SxxExx" --dry-run "/path/to/office"
 ```
 
-### Standard TV Show with Episode Titles
+### Standard TV Show with Episode Titles and Deep Clean
 ```bash
-./rename.sh --format "Show (Year) - SxxExx - Title" --dry-run "/path/to/office"
+./rename.sh --deep-clean --format "Show (Year) - SxxExx - Title" --dry-run "/path/to/office"
 ```
 
-### Anime (with anime mode)
+### Anime (with anime mode and deep clean)
 ```bash
-./rename.sh --anime --dry-run "/path/to/anime/show"
-./rename.sh --anime --format "Show - SxxExx" --series "Attack on Titan" --dry-run "/path/to/aot"
+./rename.sh --anime --deep-clean --dry-run "/path/to/anime/show"
+./rename.sh --anime --deep-clean --format "Show - SxxExx" --series "Attack on Titan" --dry-run "/path/to/aot"
 ```
 
 ### Shows with episode titles
@@ -430,9 +476,9 @@ The script uses advanced parsing to cleanly extract episode titles:
 ./rename.sh --format "Show - SxxExx - Title" --dry-run "/path/to/show-with-good-titles"
 ```
 
-### Clean, minimal naming
+### Clean, minimal naming with metadata cleanup
 ```bash
-./rename.sh --format "SxxExx" --dry-run "/path/to/shows"
+./rename.sh --deep-clean --format "SxxExx" --dry-run "/path/to/shows"
 ```
 
 ---
@@ -442,15 +488,17 @@ The script uses advanced parsing to cleanly extract episode titles:
 1. **Always use `--dry-run` first** to preview changes
 2. **Organize shows properly**: Each show should have its own folder before running the script
 3. **Use `--anime` for fansub releases** and anime with non-standard naming
-4. **Use `--verbose`** when troubleshooting or understanding the parsing process
-5. **Start with `"Show (Year) - SxxExx"` format** for TV shows - it's very compatible
-6. **Use `"Show - SxxExx"` format for anime** - cleaner and more appropriate
-7. **Try `"Show (Year) - SxxExx - Title"` for shows with good episode titles**
-8. **Specify `--series`** if auto-detection isn't working well
-9. **Process shows individually** rather than running on a mixed folder
-10. **Make backups** of important collections before running
-11. **Test on a small subset** before processing large collections
-12. **The script preserves meaningful parenthetical content** like "(Part 1)" while removing technical metadata
+4. **Use `--deep-clean` for MKV files** to clean internal metadata and companion files
+5. **Use `--verbose`** when troubleshooting or understanding the parsing process
+6. **Start with `"Show (Year) - SxxExx"` format** for TV shows - it's very compatible
+7. **Use `"Show - SxxExx"` format for anime** - cleaner and more appropriate
+8. **Try `"Show (Year) - SxxExx - Title"` for shows with good episode titles**
+9. **Specify `--series`** if auto-detection isn't working well
+10. **Process shows individually** rather than running on a mixed folder
+11. **Make backups** of important collections before running
+12. **Test on a small subset** before processing large collections
+13. **The script preserves meaningful parenthetical content** like "(Part 1)" while removing technical metadata
+14. **Permission issues are handled automatically** when possible
 
 ---
 
@@ -459,6 +507,13 @@ The script uses advanced parsing to cleanly extract episode titles:
 - Bash 4.0+ (most modern systems)
 - Standard Unix tools (`find`, `sed`, etc.)
 - Write permissions to target directories
+
+### Optional Dependencies (for `--deep-clean`)
+- **MKVToolNix** (`mkvpropedit`, `mkvmerge`) - Required for MKV metadata cleanup
+  - Ubuntu/Debian: `sudo apt install mkvtoolnix`
+  - macOS: `brew install mkvtoolnix`
+  - Windows: Download from https://mkvtoolnix.download/
+  - **Note**: Script works without these tools but skips metadata cleanup
 
 ---
 

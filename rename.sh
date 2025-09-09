@@ -15,6 +15,7 @@ shopt -s nocaseglob
 DRY_RUN=false
 VERBOSE=false
 FORCE=false
+DEEP_CLEAN=false
 SERIES_NAME=""
 BASE_PATH="."
 OUTPUT_FORMAT="Show - SxxExx - Title"
@@ -57,6 +58,7 @@ Options:
   --verbose           Show detailed processing information
   --force             Overwrite existing files (use with caution)
   --anime             Enable anime/fansub mode (prioritizes anime naming patterns)
+  --deep-clean        Clean internal MKV metadata and rename companion files
   --series "Name"     Specify series name (auto-detected if not provided)
   --format FORMAT     Output format (default: "Show - SxxExx - Title")
                       Options: 
@@ -472,6 +474,135 @@ build_filename() {
 }
 
 # =============================================================================
+# METADATA CLEANUP FUNCTIONS
+# =============================================================================
+
+companion_rename() {
+    local old_video="$1" 
+    local new_video="$2" 
+    local dry_run="$3"
+
+    local dir old_base new_base
+    dir="$(dirname "$old_video")"
+    old_base="$(basename "${old_video%.*}")"
+    new_base="$(basename "${new_video%.*}")"
+
+    # Sidecar extensions we care about
+    local -a exts=(srt ass vtt ssa sub idx nfo jpg jpeg png ttml txt sfv srr tbn cue xml mka mks)
+
+    shopt -s nullglob
+    for path in "$dir"/"$old_base"*; do
+        # Skip the video file itself
+        [[ "$path" == "$old_video" ]] && continue
+
+        local fname ext
+        fname="$(basename "$path")"
+        ext="${fname##*.}"
+
+        # Only touch files with whitelisted extensions
+        if [[ ! " ${exts[*]} " =~ " ${ext} " ]]; then
+            continue
+        fi
+
+        # Ensure filename starts with old base
+        case "$fname" in
+            "$old_base"*) ;;
+            *) continue ;;
+        esac
+
+        # Preserve suffix after old base
+        local suffix new_name new_path
+        suffix="${fname#"$old_base"}"
+        new_name="${new_base}${suffix}"
+        new_path="$dir/$new_name"
+
+        if [[ -e "$new_path" ]]; then
+            print_verbose "Skipping existing sidecar: $new_name"
+            continue
+        fi
+
+        if [[ "$dry_run" == true ]]; then
+            print_status "$YELLOW" "  [DRY] Would rename sidecar: $fname → $new_name"
+        else
+            if mv "$path" "$new_path" 2>/dev/null; then
+                print_status "$GREEN" "  ✓ Renamed sidecar: $fname → $new_name"
+            else
+                print_status "$RED" "  ✗ Failed to rename sidecar: $fname"
+            fi
+        fi
+    done
+    shopt -u nullglob
+}
+
+deep_clean_mkv() {
+    local file="$1"
+    local clean_title="$2"
+    local dry_run="$3"
+    
+    # Check if we have the required tools
+    if ! command -v mkvpropedit >/dev/null 2>&1; then
+        print_verbose "mkvpropedit not found - skipping internal metadata cleanup"
+        return 0
+    fi
+	
+	# Check file permissions (skip in dry-run mode)
+    if [[ "$dry_run" != true ]] && ! check_file_writable "$file"; then
+        print_status "$YELLOW" "  ! Skipping metadata cleanup - permission denied: $(basename "$file")"
+        return 0
+    fi
+    
+    print_verbose "Cleaning internal metadata for: $(basename "$file")"
+    
+    # Build single command with all edits
+    local cmd=(mkvpropedit --quiet)
+    
+    # Add container title edit
+    cmd+=(--edit info --set "title=$clean_title")
+    
+    # Get track count and add track edits
+    local track_count
+    if track_count=$(mkvmerge -i "$file" 2>/dev/null | grep -c "Track ID"); then
+        for ((i=1; i<=track_count; i++)); do
+            cmd+=(--edit "track:$i" --delete name)
+        done
+    fi
+    
+    # Add file at the end
+    cmd+=("$file")
+    
+    if [[ "$dry_run" == true ]]; then
+        print_status "$YELLOW" "  [DRY] Would clean metadata: $(basename "$file")"
+        print_verbose "Command: ${cmd[*]}"
+    else
+        if "${cmd[@]}" 2>/dev/null; then
+            print_status "$GREEN" "  ✓ Cleaned metadata: $(basename "$file")"
+        else
+            print_verbose "Metadata cleanup failed: $file"
+        fi
+    fi
+}
+
+check_file_writable() {
+    local file="$1"
+    
+    # Check if file exists and is writable
+    if [[ ! -w "$file" ]]; then
+        print_verbose "File not writable, attempting to fix permissions: $(basename "$file")"
+        
+        # Try to add write permission
+        if chmod u+w "$file" 2>/dev/null; then
+            print_verbose "Fixed permissions for: $(basename "$file")"
+            return 0
+        else
+            print_verbose "Could not fix permissions for: $(basename "$file")"
+            return 1
+        fi
+    fi
+    
+    return 0
+}
+
+# =============================================================================
 # FILE OPERATIONS
 # =============================================================================
 
@@ -486,11 +617,19 @@ safe_rename() {
         return 1
     fi
     
-    # Skip if already correctly named
-    if [[ "$old_path" == "$new_path" ]]; then
-        print_status "$GREEN" "  ✓ Already correct: $(basename "$new_path")"
-        return 0
-    fi
+    # In the "already correct" section, add this line:
+	if [[ "$old_path" == "$new_path" ]]; then
+		print_status "$GREEN" "  ✓ Already correct: $(basename "$new_path")"
+    
+		# Still handle companion files and metadata cleanup for video files
+		if [[ "$type" == "file" ]]; then
+			companion_rename "$old_path" "$new_path" false
+			if [[ "$DEEP_CLEAN" == true && "${new_path,,}" == *.mkv ]]; then
+				deep_clean_mkv "$new_path" "$(basename "${new_path%.*}")" false
+			fi
+		fi
+		return 0
+	fi
     
     # Check if destination already exists
     if [[ -e "$new_path" && "$old_path" != "$new_path" ]]; then
@@ -504,9 +643,25 @@ safe_rename() {
     
     if [[ "$DRY_RUN" == true ]]; then
         print_status "$YELLOW" "  [DRY] $type: $(basename "$old_path") → $(basename "$new_path")"
+        
+        # Handle companion files and metadata cleanup in dry run mode
+        if [[ "$type" == "file" ]]; then
+            companion_rename "$old_path" "$new_path" true
+            if [[ "$DEEP_CLEAN" == true && "${new_path,,}" == *.mkv ]]; then
+                deep_clean_mkv "$new_path" "$(basename "${new_path%.*}")" true
+            fi
+        fi
     else
         if mv "$old_path" "$new_path" 2>/dev/null; then
             print_status "$GREEN" "  ✓ Renamed $type: $(basename "$old_path") → $(basename "$new_path")"
+            
+            # Handle companion files and metadata cleanup for video files
+            if [[ "$type" == "file" ]]; then
+                companion_rename "$old_path" "$new_path" false
+                if [[ "$DEEP_CLEAN" == true && "${new_path,,}" == *.mkv ]]; then
+                    deep_clean_mkv "$new_path" "$(basename "${new_path%.*}")" false
+                fi
+            fi
         else
             print_status "$RED" "  ✗ Failed to rename $type: $(basename "$old_path")"
             return 1
@@ -567,12 +722,8 @@ rename_episode_files() {
         local new_file_path="$file_dir/$new_file_name"
         print_verbose "Formatted filename: '$new_file_name'"
         
-        # Skip if already in correct format
-        if [[ "$file_name" == "$new_file_name" ]]; then
-            print_status "$GREEN" "  ✓ Already formatted: $file_name"
-            continue
-        fi
-        
+		print_verbose "About to call safe_rename: old='$file' new='$new_file_path'"
+		
         if safe_rename "$file" "$new_file_path" "file"; then
             renamed_count=$((renamed_count + 1))
         fi
@@ -651,7 +802,6 @@ rename_subtitle_files() {
         # Skip if already in correct format
         if [[ "$file_name" == "$new_file_name" ]]; then
             print_status "$GREEN" "  ✓ Already formatted: $file_name"
-            continue
         fi
         
         if safe_rename "$file" "$new_file_path" "subtitle"; then
@@ -701,6 +851,10 @@ while [[ $# -gt 0 ]]; do
 		--anime)
             ANIME_MODE=true
             [[ "$OUTPUT_FORMAT" == "Show - SxxExx - Title" ]] && OUTPUT_FORMAT="Show - SxxExx"
+            shift
+            ;;
+		--deep-clean)
+            DEEP_CLEAN=true
             shift
             ;;
         --verbose)
@@ -770,6 +924,7 @@ print_status "$BLUE" "Output format: $OUTPUT_FORMAT"
 [[ "$DRY_RUN" == true ]] && print_status "$YELLOW" "DRY RUN MODE - No changes will be made"
 [[ "$VERBOSE" == true ]] && print_status "$CYAN" "VERBOSE MODE - Detailed output enabled"
 [[ "$FORCE" == true ]] && print_status "$YELLOW" "FORCE MODE - Will overwrite existing files"
+[[ "$DEEP_CLEAN" == true ]] && print_status "$PURPLE" "DEEP CLEAN MODE - Will clean metadata and rename companion files"
 echo ""
 
 # Main processing

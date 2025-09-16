@@ -33,6 +33,9 @@ CYAN="\033[0;36m"
 PURPLE="\033[0;35m"
 NC="\033[0m"
 
+# Title deduplication tracking
+declare -A SEEN_TITLES
+
 # =============================================================================
 # UTILITY FUNCTIONS
 # =============================================================================
@@ -45,6 +48,12 @@ print_status() {
 
 print_verbose() {
     [[ "$VERBOSE" == true ]] && print_status "$CYAN" "  [VERBOSE] $1" >&2
+}
+
+# Normalize text for comparison (lowercase, alphanumeric only)
+normalize_text() {
+    local text="$1"
+    echo "$text" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+//g'
 }
 
 usage() {
@@ -281,11 +290,89 @@ clean_title() {
     echo "$title"
 }
 
+# NEW: Safe episode title validation and cleanup
+safe_episode_title() {
+    local candidate_title="$1"
+    local series_name="$2"
+    local season="$3"
+    local episode="$4"
+    local file_path="$5"
+    
+    local title="$candidate_title"
+    
+    # Normalize for comparison
+    local norm_title norm_series
+    norm_title=$(normalize_text "$title")
+    norm_series=$(normalize_text "$series_name")
+    
+    # Remove year from series for better comparison
+    local series_no_year
+    series_no_year=$(echo "$series_name" | sed 's/ *(19[0-9][0-9])//g; s/ *(2[0-9][0-9][0-9])//g')
+    local norm_series_no_year
+    norm_series_no_year=$(normalize_text "$series_no_year")
+    
+    print_verbose "Title validation: candidate='$title', series='$series_name'"
+    print_verbose "Normalized: title='$norm_title', series='$norm_series', series_no_year='$norm_series_no_year'"
+    
+    # Drop title if it's blank, contains series name, or looks like generic episode reference
+    if [[ -z "$title" ]] || \
+       [[ "$norm_title" == "$norm_series" ]] || \
+       [[ "$norm_title" == "$norm_series_no_year" ]] || \
+       [[ "$norm_title" == *"$norm_series_no_year"* ]] || \
+       [[ "$norm_series_no_year" == *"$norm_title"* ]] || \
+       [[ "$norm_title" =~ ^(episode|ep)?0*[0-9]+$ ]]; then
+        print_verbose "Title rejected: blank, contains/matches series name, or generic episode reference"
+        title=""
+    fi
+    
+    # If still blank and we have mediainfo, try to extract real episode title from container
+    if [[ -z "$title" && -n "$file_path" ]] && command -v mediainfo >/dev/null 2>&1; then
+        local media_title
+        media_title=$(mediainfo --Output='General;%Title%' "$file_path" 2>/dev/null | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')
+        if [[ -n "$media_title" ]]; then
+            local norm_media_title
+            norm_media_title=$(normalize_text "$media_title")
+            # Apply same checks to media title
+            if [[ -n "$norm_media_title" && "$norm_media_title" != "$norm_series" && \
+                  "$norm_media_title" != "$norm_series_no_year" && \
+                  "$norm_media_title" != *"$norm_series_no_year"* && \
+                  "$norm_series_no_year" != *"$norm_media_title"* ]]; then
+                title="$media_title"
+                print_verbose "Retrieved title from mediainfo: '$title'"
+            fi
+        fi
+    fi
+    
+    # Deduplicate: if we've seen this normalized title before, drop it
+    if [[ -n "$title" ]]; then
+        local dedup_key="${season}_${norm_title}"
+        if [[ -n "${SEEN_TITLES[$dedup_key]:-}" ]]; then
+            print_verbose "Title rejected: duplicate within season ($title)"
+            title=""
+        else
+            SEEN_TITLES[$dedup_key]=1
+            print_verbose "Title accepted: '$title'"
+        fi
+    fi
+    
+    [[ -z "$title" && "$VERBOSE" == true ]] && print_verbose "No valid episode title found"
+    
+    echo "$title"
+}
+
 get_episode_title() {
     local filename="$1"
     local season_episode="$2"
     local series_name="$3"
+    local file_path="$4"  # NEW: full path for mediainfo
     local title
+    
+    # Extract season and episode numbers for validation
+    local season episode
+    if [[ "$season_episode" =~ S([0-9]+)E([0-9]+) ]]; then
+        season="${BASH_REMATCH[1]}"
+        episode="${BASH_REMATCH[2]}"
+    fi
     
     # Start with just the filename without extension
     title="${filename%.*}"
@@ -391,14 +478,10 @@ get_episode_title() {
     # If an unmatched '(' remains at end, drop it and the tail
     title=$(echo "$title" | sed -E 's/[[:space:]]*\([^)]*$//')
     
-    # Check if we have a meaningful title
-    if [[ ${#title} -lt 3 ]] || \
-       [[ "$title" =~ ^[0-9.-]+$ ]] || \
-       [[ "$title" =~ ^(WEB|H264|X264|X265|HEVC|HDTV|AMZN|DL|DDP|AAC|AC3|GOTHIC|RARBG|FOV|PROPER|REPACK|INTERNAL|VIETNAM)$ ]]; then
-        echo ""
-    else
-        echo "$title"
-    fi
+    # NEW: Validate the title using our safe_episode_title function
+    title=$(safe_episode_title "$title" "$series_name" "$season" "$episode" "$file_path")
+    
+    echo "$title"
 }
 
 build_filename() {
@@ -711,9 +794,9 @@ rename_episode_files() {
         fi
         print_verbose "Extracted season/episode: $season_episode"
         
-        # Extract episode title
+        # Extract episode title - NOW PASSING THE FULL FILE PATH
         local episode_title
-        episode_title=$(get_episode_title "$file_name" "$season_episode" "$detected_series")
+        episode_title=$(get_episode_title "$file_name" "$season_episode" "$detected_series" "$file")
         print_verbose "Extracted episode title: '$episode_title'"
         
         # Format the new filename
@@ -778,9 +861,9 @@ rename_subtitle_files() {
             print_verbose "Detected language code: $lang_code"
         fi
         
-        # Extract episode title
+        # Extract episode title - ALSO PASSING FULL PATH FOR SUBTITLES
         local episode_title
-        episode_title=$(get_episode_title "$file_name" "$season_episode" "$detected_series")
+        episode_title=$(get_episode_title "$file_name" "$season_episode" "$detected_series" "$file")
         print_verbose "Extracted episode title: '$episode_title'"
         
         # Build new filename
@@ -848,12 +931,12 @@ while [[ $# -gt 0 ]]; do
             DRY_RUN=true
             shift
             ;;
-		--anime)
+        --anime)
             ANIME_MODE=true
             [[ "$OUTPUT_FORMAT" == "Show - SxxExx - Title" ]] && OUTPUT_FORMAT="Show - SxxExx"
             shift
             ;;
-		--deep-clean)
+        --deep-clean)
             DEEP_CLEAN=true
             shift
             ;;
@@ -872,12 +955,12 @@ while [[ $# -gt 0 ]]; do
         --format)
             OUTPUT_FORMAT="$2"
             case "$OUTPUT_FORMAT" in
-                "Show (Year) - SxxExx - Title"|"Show (Year) - SxxExx"|"Show - SxxExx - Title"|"Show - SxxExx"|"SxxExx - Title"|"SxxExx")
+                "Show "*" - SxxExx - Title"|"Show "*" - SxxExx"|"Show - SxxExx - Title"|"Show - SxxExx"|"SxxExx - Title"|"SxxExx")
                     # Valid format
                     ;;
                 *)
                     print_status "$RED" "Error: Invalid format \"$OUTPUT_FORMAT\""
-					print_status "$YELLOW" "Valid formats: \"Show (Year) - SxxExx - Title\", \"Show - SxxExx\", etc."
+                    print_status "$YELLOW" "Valid formats: \"Show (Year) - SxxExx - Title\", \"Show - SxxExx\", etc."
                     exit 1
                     ;;
             esac

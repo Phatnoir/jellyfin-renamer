@@ -665,6 +665,100 @@ deep_clean_mkv() {
     fi
 }
 
+deep_clean_mp4() {
+    local file="$1"
+    local clean_title="$2"
+    local dry_run="$3"
+    
+    # Check if we have the required tools
+    if ! command -v ffmpeg >/dev/null 2>&1; then
+        print_verbose "ffmpeg not found - skipping MP4 metadata cleanup"
+        return 0
+    fi
+    
+    # Check current metadata to see if cleaning is needed
+    local current_title=""
+    if command -v mediainfo >/dev/null 2>&1; then
+        current_title=$(mediainfo --Output='General;%Title%' "$file" 2>/dev/null | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')
+    fi
+    
+    # Skip if no title or title is already clean
+    if [[ -z "$current_title" || "$current_title" == "$clean_title" ]]; then
+        print_verbose "MP4 metadata already clean, skipping: $(basename "$file")"
+        return 0
+    fi
+    
+    # Check if current title looks like technical metadata that should be cleaned
+    local norm_current norm_clean
+    norm_current=$(normalize_text "$current_title")
+    norm_clean=$(normalize_text "$clean_title")
+    
+    # Only clean if the current title contains technical indicators or is significantly different
+    if [[ "$norm_current" != *"720p"* && "$norm_current" != *"1080p"* && \
+          "$norm_current" != *"x264"* && "$norm_current" != *"x265"* && \
+          "$norm_current" != *"web"* && "$norm_current" != *"bluray"* && \
+          "$norm_current" != *"hdtv"* && "$norm_current" != *"webrip"* && \
+          "$norm_current" == "$norm_clean"* ]]; then
+        print_verbose "MP4 title looks clean, skipping: '$current_title'"
+        return 0
+    fi
+	
+	# Check file permissions (skip in dry-run mode)
+    if [[ "$dry_run" != true ]] && ! check_file_writable "$file"; then
+        print_status "$YELLOW" "  ! Skipping metadata cleanup - permission denied: $(basename "$file")"
+        return 0
+    fi
+    
+    print_verbose "Cleaning MP4 metadata for: $(basename "$file") (current title: '$current_title')"
+    
+    if [[ "$dry_run" == true ]]; then
+        print_status "$YELLOW" "  [DRY] Would clean MP4 metadata: $(basename "$file")"
+        print_verbose "Would change title from: '$current_title' to: '$clean_title'"
+    else
+        # Create temporary file
+        local temp_file="${file}.tmp"
+        
+        # Build ffmpeg command to clean metadata and set new title
+        local cmd=(ffmpeg -i "$file" -c copy -map_metadata -1)
+        cmd+=(-metadata "title=$clean_title")
+        cmd+=(-y "$temp_file")
+        
+        if "${cmd[@]}" 2>/dev/null; then
+            if mv "$temp_file" "$file" 2>/dev/null; then
+                print_status "$GREEN" "  ✓ Cleaned MP4 metadata: $(basename "$file")"
+            else
+                print_status "$RED" "  ✗ Failed to replace file: $(basename "$file")"
+                rm -f "$temp_file" 2>/dev/null
+            fi
+        else
+            print_status "$RED" "  ✗ Failed to clean MP4 metadata: $(basename "$file")"
+            rm -f "$temp_file" 2>/dev/null
+        fi
+    fi
+}
+
+# Generic metadata cleanup function
+deep_clean_metadata() {
+    local file="$1"
+    local clean_title="$2"
+    local dry_run="$3"
+    
+    local extension="${file##*.}"
+    extension="${extension,,}" # convert to lowercase
+    
+    case "$extension" in
+        mkv)
+            deep_clean_mkv "$file" "$clean_title" "$dry_run"
+            ;;
+        mp4|m4v)
+            deep_clean_mp4 "$file" "$clean_title" "$dry_run"
+            ;;
+        *)
+            print_verbose "Deep clean not supported for .$extension files"
+            ;;
+    esac
+}
+
 check_file_writable() {
     local file="$1"
     
@@ -707,8 +801,8 @@ safe_rename() {
 		# Still handle companion files and metadata cleanup for video files
 		if [[ "$type" == "file" ]]; then
 			companion_rename "$old_path" "$new_path" false
-			if [[ "$DEEP_CLEAN" == true && "${new_path,,}" == *.mkv ]]; then
-				deep_clean_mkv "$new_path" "$(basename "${new_path%.*}")" false
+			if [[ "$DEEP_CLEAN" == true ]]; then
+				deep_clean_metadata "$new_path" "$(basename "${new_path%.*}")" false
 			fi
 		fi
 		return 0
@@ -730,8 +824,8 @@ safe_rename() {
         # Handle companion files and metadata cleanup in dry run mode
         if [[ "$type" == "file" ]]; then
             companion_rename "$old_path" "$new_path" true
-            if [[ "$DEEP_CLEAN" == true && "${new_path,,}" == *.mkv ]]; then
-                deep_clean_mkv "$new_path" "$(basename "${new_path%.*}")" true
+            if [[ "$DEEP_CLEAN" == true ]]; then
+                deep_clean_metadata "$new_path" "$(basename "${new_path%.*}")" true
             fi
         fi
     else
@@ -741,8 +835,8 @@ safe_rename() {
             # Handle companion files and metadata cleanup for video files
             if [[ "$type" == "file" ]]; then
                 companion_rename "$old_path" "$new_path" false
-                if [[ "$DEEP_CLEAN" == true && "${new_path,,}" == *.mkv ]]; then
-                    deep_clean_mkv "$new_path" "$(basename "${new_path%.*}")" false
+                if [[ "$DEEP_CLEAN" == true ]]; then
+                    deep_clean_metadata "$new_path" "$(basename "${new_path%.*}")" false
                 fi
             fi
         else

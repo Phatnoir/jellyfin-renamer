@@ -534,6 +534,14 @@ The script uses advanced parsing to cleanly extract episode titles:
 
 ---
 
+## Contributors
+
+Thanks to the following people who have contributed to this project:
+
+- **[@matthiasbeyer](https://github.com/matthiasbeyer)** - Added shellcheck CI workflow for automated code quality checks
+
+---
+
 ## License
 
 This script is provided as-is for personal use. Feel free to modify and distribute.

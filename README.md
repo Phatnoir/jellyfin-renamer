@@ -11,6 +11,10 @@ A smart, cross-platform Bash script that renames TV show files so they work perf
 
 ## Recent Improvements
 
+* **FIXED**: Title extraction now prevents series name duplication (e.g., "Andor - S01E01 - Star Wars Andor" becomes "Andor - S01E01")
+* **NEW**: Intelligent MP4 metadata cleaning with `--deep-clean` (only processes files with problematic metadata)
+* **NEW**: Smart title validation with series name detection and deduplication
+* **NEW**: MediaInfo fallback for extracting real episode titles from container metadata
 * **NEW**: Deep metadata cleanup with `--deep-clean` flag for MKV files
 * **NEW**: Automatic companion file renaming (subtitles, artwork, NFO files)
 * **NEW**: Intelligent permission fixing for read-only files
@@ -322,12 +326,23 @@ Breaking Bad (2008)/
 
 ## Deep Clean Feature (`--deep-clean`)
 
-The `--deep-clean` option provides comprehensive metadata cleanup for MKV files:
+The `--deep-clean` option provides comprehensive metadata cleanup for video files:
+
+### Supported Formats:
+- **MKV files**: Always cleaned (container titles, track names, metadata)
+- **MP4/M4V files**: Only cleaned if they contain problematic metadata
+- **Other formats**: Companion file renaming only
 
 ### What it cleans:
-- **Container title**: Sets to match your clean filename
+- **Container titles**: Sets to match your clean filename
 - **Track names**: Removes technical metadata from video/audio/subtitle tracks
 - **Companion files**: Automatically renames .srt, .nfo, .jpg files to match
+
+### MP4 Intelligence:
+The script automatically detects if MP4 files need cleaning by checking for:
+- Technical indicators (720p, x264, webrip, etc.)
+- Release group artifacts
+- Files with clean/empty titles are skipped automatically
 
 ### Before deep clean (internal MKV metadata):
 ```
@@ -392,12 +407,13 @@ Use `--anime` when processing:
 
 The script uses advanced parsing to cleanly extract episode titles:
 
+- **Series Name Validation**: Prevents series name variants from being used as episode titles
+- **Smart Deduplication**: Avoids duplicate titles within the same season
 - **Boundary Detection**: Identifies where technical metadata begins (e.g., at quality indicators like "720p")
-- **Smart Parenthetical Handling**: Preserves meaningful content like "(Part 1)" while removing technical metadata
-- **Anime-Aware Parsing**: Handles bracket structures in fansub releases
+- **MediaInfo Fallback**: Attempts to extract real episode titles from container metadata when filename parsing fails
+- **Intelligent Rejection**: Drops titles that match series names or contain only technical metadata
 - **Enhanced Cleaning**: Removes series names, years, and technical tags while preserving actual episode titles
 - **Edge Case Handling**: Properly handles parentheses, brackets, and complex filename structures
-- **Fallback Logic**: When clean titles can't be extracted, falls back to episode codes only
 
 ---
 
@@ -510,9 +526,10 @@ The script uses advanced parsing to cleanly extract episode titles:
 
 ### Optional Dependencies (for `--deep-clean`)
 - **MKVToolNix** (`mkvpropedit`, `mkvmerge`) - Required for MKV metadata cleanup
-  - Ubuntu/Debian: `sudo apt install mkvtoolnix`
-  - macOS: `brew install mkvtoolnix`
-  - Windows: Download from https://mkvtoolnix.download/
+- **FFmpeg** - Required for MP4 metadata cleanup
+- **MediaInfo** - Required for MP4 metadata detection and episode title extraction
+  - Ubuntu/Debian: `sudo apt install mkvtoolnix ffmpeg mediainfo`
+  - macOS: `brew install mkvtoolnix ffmpeg mediainfo`
   - **Note**: Script works without these tools but skips metadata cleanup
 
 ---

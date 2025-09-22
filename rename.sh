@@ -186,7 +186,7 @@ get_season_episode() {
     # Standard patterns (always try these if anime patterns didn't match)
     if [[ -z "$season" || -z "$episode" ]]; then
         # Pattern 1: S01E01, S1E1, etc.
-        if [[ "$filename" =~ [Ss]([0-9]{1,2})[Ee]([0-9]{1,2}) ]]; then
+        if [[ "$filename" =~ [Ss]([0-9]{1,2})[[:space:]_.-]*[Ee]([0-9]{1,2}) ]]; then
             season="${BASH_REMATCH[1]}"
             episode="${BASH_REMATCH[2]}"
         
@@ -378,7 +378,7 @@ get_episode_title() {
     title="${filename%.*}"
     
     # Remove season/episode patterns first
-    title=$(echo "$title" | sed "s/[Ss][0-9][0-9]*[Ee][0-9][0-9]*[._-]*//")
+    title=$(echo "$title" | sed "s/[Ss][0-9][0-9]*[[:space:]_.-]*[Ee][0-9][0-9]*[._ -]*//")
     title=$(echo "$title" | sed "s/[0-9][0-9]*x[0-9][0-9]*[._-]*//")
     
     # Remove series name and year combo (like "Doctor Who 2006")
@@ -979,6 +979,7 @@ rename_subtitle_files() {
         # Skip if already in correct format
         if [[ "$file_name" == "$new_file_name" ]]; then
             print_status "$GREEN" "  ✓ Already formatted: $file_name"
+			continue  # Add this line to skip the safe_rename call
         fi
         
         if safe_rename "$file" "$new_file_path" "subtitle"; then

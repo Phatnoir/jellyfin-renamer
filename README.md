@@ -11,22 +11,15 @@ A smart, cross-platform Bash script that renames TV show files so they work perf
 
 ## Recent Improvements
 
-* **FIXED**: Title extraction now prevents series name duplication (e.g., "Andor - S01E01 - Star Wars Andor" becomes "Andor - S01E01")
-* **NEW**: Intelligent MP4 metadata cleaning with `--deep-clean` (only processes files with problematic metadata)
-* **NEW**: Smart title validation with series name detection and deduplication
-* **NEW**: MediaInfo fallback for extracting real episode titles from container metadata
-* **NEW**: Deep metadata cleanup with `--deep-clean` flag for MKV files
-* **NEW**: Automatic companion file renaming (subtitles, artwork, NFO files)
-* **NEW**: Intelligent permission fixing for read-only files
-* **NEW**: Enhanced title extraction with intelligent boundary detection
-* **NEW**: Improved technical metadata removal with precise pattern matching
-* **NEW**: Better handling of parenthetical content (preserves meaningful ones, removes technical)
-* **NEW**: Added anime/fansub support with `--anime` flag
-* **NEW**: Support for anime naming patterns like `[Group] Show - 01 [Quality]`
-* More robust handling of complex filename structures and edge cases
-* Better series name cleaning and normalization
-* Added subtitle file support with language code preservation
-* Fixed release group removal to handle both uppercase and lowercase groups
+* **FIXED**: Episode pattern matching now supports spaced formats like `S01 E01` in addition to `S01E01`
+* **FIXED**: Subtitle files are no longer processed twice when using `--deep-clean`
+* **IMPROVED**: Smart title validation prevents series name duplication and deduplication within seasons
+* **IMPROVED**: Enhanced metadata cleaning for MP4 files (only processes files with problematic metadata)
+* **IMPROVED**: Better handling of anime/fansub naming patterns with `--anime` flag
+* **FEATURE**: Deep metadata cleanup with `--deep-clean` for MKV and MP4 files
+* **FEATURE**: Automatic companion file renaming (subtitles, artwork, NFO files)
+* **FEATURE**: MediaInfo fallback for extracting episode titles from container metadata
+* **FEATURE**: Intelligent permission fixing for read-only files
 
 ---
 
@@ -57,14 +50,14 @@ chmod +x rename.sh
 * **Companion File Management**: Automatically renames subtitles, artwork, and NFO files to match videos
 * **Intelligent Permission Handling**: Automatically fixes read-only file permissions when needed
 * **Dual Format Support**: Standard TV shows AND anime/fansub releases
+* **Flexible Episode Pattern Support**: Handles `S01E01`, `S01 E01`, `1x01`, `- 01 [Quality]` and more
 * **Intelligent Title Extraction**: Uses boundary detection to separate episode titles from technical metadata
-* **Parenthetical handling**: Preserves meaningful parenthetical content like "(Part 1)" or "(Director's Cut)" while stripping technical tags like "(1080p BluRay x265)"
-* Detects multiple episode naming patterns (`S01E01`, `1x01`, `- 01 [Quality]`)
-* Extracts series names from folder structure automatically
+* **Smart Content Preservation**: Keeps meaningful content like "(Part 1)" while removing technical tags
+* Detects series names from folder structure automatically
 * Strips codec info, quality tags, and release group names with precision
 * Supports multiple output formats, including year preservation
 * Works on Linux, macOS, and Windows (via WSL)
-* Renames subtitle files to match episode names
+* Renames subtitle files to match episode names with language code preservation
 * Runs safely with dry-run mode and validation checks
 
 ---
@@ -73,6 +66,8 @@ chmod +x rename.sh
 
 ### Standard TV Shows
 - `S01E01`, `S1E1` - Standard season/episode format
+- `S01 E01`, `S1 E1` - Spaced season/episode format
+- `S01.E01`, `S01_E01`, `S01-E01` - Various separator formats
 - `1x01`, `01x01` - Alternative season x episode format
 
 ### Anime/Fansub Releases
@@ -225,7 +220,7 @@ done
 | `--dry-run`       | Preview changes without making them         |
 | `--verbose`       | Show detailed processing information        |
 | `--force`         | Overwrite existing files (use with caution) |
-| `--deep-clean`    | Clean internal MKV metadata and rename companion files |
+| `--deep-clean`    | Clean internal MKV/MP4 metadata and rename companion files |
 | `--anime`         | Enable anime/fansub mode (prioritizes anime patterns) |
 | `--series "Name"` | Manually specify series name                |
 | `--format FORMAT` | Choose output format (see formats below)   |
@@ -366,7 +361,7 @@ The script automatically:
 
 - **Detects series name** from folder structure (e.g., "3 Body Problem (2024)" → "3 Body Problem")
 - **Preserves years** when using appropriate formats
-- **Recognizes episode patterns**: `S01E01`, `S1E1`, `1x01`, `01x01`, `- 01 [Quality]`
+- **Recognizes episode patterns**: `S01E01`, `S01 E01`, `S1E1`, `1x01`, `01x01`, `- 01 [Quality]`
 - **Handles anime/fansub formats**: Detects `[Group] Show - Episode [Metadata]` patterns
 - **Intelligently extracts episode titles** using boundary detection to separate titles from technical metadata
 - **Preserves meaningful parenthetical content** like "(Part 1)", "(Extended Cut)", "(Director's Cut)" while removing technical metadata
@@ -426,6 +421,7 @@ The script uses advanced parsing to cleanly extract episode titles:
 - **Error handling**: Graceful failure with detailed error messages
 - **Permission handling**: Automatically fixes read-only files when possible
 - **Subtitle preservation**: Maintains language codes in subtitle files
+- **No double-processing**: Prevents companion files from being renamed twice
 
 ---
 
@@ -436,9 +432,10 @@ The script uses advanced parsing to cleanly extract episode titles:
 - Verify the path is correct
 - Use `--verbose` to see what the script is detecting
 
-### Episode patterns not detected (anime)
-- **Try `--anime` flag** for fansub releases
-- Check that files follow supported patterns (`- 01 [Quality]`)
+### Episode patterns not detected
+- **For spaced formats**: The script now supports `S01 E01` format automatically
+- **For anime**: Try `--anime` flag for fansub releases
+- Check that files follow supported patterns (`S01E01`, `S01 E01`, `- 01 [Quality]`)
 - Use `--verbose` to see which patterns are being tested
 - For unusual formats, consider `--series` override
 
@@ -450,7 +447,7 @@ The script uses advanced parsing to cleanly extract episode titles:
 - Avoid mixing multiple shows in one folder
 
 ### Episode titles not clean
-- The script now uses improved boundary detection for cleaner titles
+- The script uses improved boundary detection for cleaner titles
 - Use `--format "Show - SxxExx"` to avoid including titles if they're still problematic
 - Consider manually specifying `--series` for better cleaning
 - For anime, try `--anime` flag which defaults to no episode titles
@@ -463,9 +460,12 @@ The script uses advanced parsing to cleanly extract episode titles:
 
 ### Metadata cleanup not working
 - Ensure MKVToolNix is installed for `--deep-clean` functionality
-- Check that files are actually MKV format (metadata cleanup only works on MKV)
+- Check that files are actually MKV format (metadata cleanup only works on MKV/MP4)
 - Use `--verbose` to see detailed processing information
 - On Windows/WSL: install MKVToolNix **inside WSL** or add the Windows install path to WSL's `PATH`
+
+### Subtitles being processed twice
+- This has been fixed - companion subtitles are no longer double-processed during `--deep-clean`
 
 ---
 
@@ -504,7 +504,7 @@ The script uses advanced parsing to cleanly extract episode titles:
 1. **Always use `--dry-run` first** to preview changes
 2. **Organize shows properly**: Each show should have its own folder before running the script
 3. **Use `--anime` for fansub releases** and anime with non-standard naming
-4. **Use `--deep-clean` for MKV files** to clean internal metadata and companion files
+4. **Use `--deep-clean` for MKV/MP4 files** to clean internal metadata and companion files
 5. **Use `--verbose`** when troubleshooting or understanding the parsing process
 6. **Start with `"Show (Year) - SxxExx"` format** for TV shows - it's very compatible
 7. **Use `"Show - SxxExx"` format for anime** - cleaner and more appropriate
@@ -515,6 +515,7 @@ The script uses advanced parsing to cleanly extract episode titles:
 12. **Test on a small subset** before processing large collections
 13. **The script preserves meaningful parenthetical content** like "(Part 1)" while removing technical metadata
 14. **Permission issues are handled automatically** when possible
+15. **Spaced episode formats work automatically** - no special flags needed for `S01 E01` vs `S01E01`
 
 ---
 

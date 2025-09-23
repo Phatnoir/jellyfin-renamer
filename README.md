@@ -11,8 +11,12 @@ A smart, cross-platform Bash script that renames TV show files so they work perf
 
 ## Recent Improvements
 
+* **FIXED**: Sidecar file renaming now works reliably on case-insensitive filesystems (WSL/NTFS)
+* **FIXED**: Subtitles no longer get renamed twice with different titles than their video files
+* **FIXED**: Episode titles with hyphens (like "Ch-ch-changes") are now preserved correctly
 * **FIXED**: Episode pattern matching now supports spaced formats like `S01 E01` in addition to `S01E01`
 * **FIXED**: Subtitle files are no longer processed twice when using `--deep-clean`
+* **IMPROVED**: Enhanced language code detection supports more formats (EN, pt-BR, forced, etc.)
 * **IMPROVED**: Smart title validation prevents series name duplication and deduplication within seasons
 * **IMPROVED**: Enhanced metadata cleaning for MP4 files (only processes files with problematic metadata)
 * **IMPROVED**: Better handling of anime/fansub naming patterns with `--anime` flag

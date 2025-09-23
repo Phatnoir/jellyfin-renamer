@@ -264,8 +264,8 @@ clean_title() {
 	title=$(echo "$title" | sed 's/([^)]*\(720p\|1080p\|2160p\|4K\|480p\|576p\|x264\|x265\|HEVC\|BluRay\|WEB\|HDTV\)[^)]*)//gi')
     title=$(echo "$title" | sed 's/\[[^]]*\]//g')
     
-    # FIXED: Better release group removal (case-insensitive, handles lowercase)
-    title=$(echo "$title" | sed -E 's/-[A-Za-z0-9]+$//')
+    # FIXED: Better release group removal (case-insensitive, handles lowercase) NEW: (only strip ALLCAPS or contains digits, 3+ chars)
+    title=$(echo "$title" | sed -E 's/-([A-Z0-9]{3,}|[A-Za-z0-9]*[0-9][A-Za-z0-9]*)$//')
     
     # Remove technical abbreviations that survived
     title=$(echo "$title" | sed -E 's/(^|[._ -])(DL|DDP?)([._ -]|$)/\1\3/Ig')
@@ -281,10 +281,6 @@ clean_title() {
     # Normalize spacing and punctuation
     title=$(echo "$title" | sed 's/[._]/ /g')
     title=$(echo "$title" | sed 's/  */ /g')
-    title=$(echo "$title" | sed 's/^ *//; s/ *$//')
-    
-    # Remove trailing numbers that might be leftover from cleaning
-    title=$(echo "$title" | sed 's/ [0-9][0-9]*$//g')
     title=$(echo "$title" | sed 's/^ *//; s/ *$//')
     
     echo "$title"
@@ -599,14 +595,33 @@ companion_rename() {
         new_name="${new_base}${suffix}"
         new_path="$dir/$new_name"
 
-        if [[ -e "$new_path" ]]; then
-            print_verbose "Skipping existing sidecar: $new_name"
-            continue
-        fi
-
         if [[ "$dry_run" == true ]]; then
             print_status "$YELLOW" "  [DRY] Would rename sidecar: $fname → $new_name"
         else
+            # Ensure writable
+            chmod u+w "$path" 2>/dev/null
+            
+            # Check if destination exists and handle appropriately
+            if [[ -e "$new_path" ]]; then
+                # Check if it's a case-only rename on case-insensitive filesystem
+                if [[ "$(printf %s "$path" | tr '[:upper:]' '[:lower:]')" = \
+                      "$(printf %s "$new_path" | tr '[:upper:]' '[:lower:]')" ]]; then
+                    # Same file, different case - do the two-step rename
+                    local tmp="$new_path.__tmp__"
+                    if mv "$path" "$tmp" 2>/dev/null && mv "$tmp" "$new_path" 2>/dev/null; then
+                        print_status "$GREEN" "  ✓ Renamed sidecar: $fname → $new_name"
+                    else
+                        print_status "$RED" "  ✗ Failed to rename sidecar (case hop): $fname"
+                    fi
+                    continue
+                else
+                    # Actually different file exists - skip it
+                    print_verbose "Skipping existing sidecar: $new_name"
+                    continue
+                fi
+            fi
+            
+            # Normal move (destination doesn't exist)
             if mv "$path" "$new_path" 2>/dev/null; then
                 print_status "$GREEN" "  ✓ Renamed sidecar: $fname → $new_name"
             else
@@ -950,23 +965,44 @@ rename_subtitle_files() {
         local base_name="${file_name%.*}"  # Remove extension
         
         # Check if there's a language code before the extension
-        if [[ "$base_name" =~ \.([a-z]{2,3})$ ]]; then
-            lang_code="${BASH_REMATCH[1]}"
-            print_verbose "Detected language code: $lang_code"
+		if [[ "$base_name" =~ \.([A-Za-z]{2,4}|[A-Za-z]{2,3}-[A-Za-z]{2,3}|forced)$ ]]; then
+			lang_code="${BASH_REMATCH[1]}"
+			lang_code="${lang_code,,}"   # normalize to lowercase
+			print_verbose "Detected language code: $lang_code"
+		fi
+        
+        # Find matching video file to use its exact title
+        local video_base=""
+        while IFS= read -r -d '' v; do
+            local bn="$(basename "${v%.*}")"
+            if [[ "$bn" =~ (^|[^0-9])$season_episode([^0-9]|$) ]]; then
+                video_base="$bn"
+                print_verbose "Found matching video: '$bn'"
+                break
+            fi
+        done < <(find "$file_dir" -maxdepth 1 -type f \
+                  \( -iname '*.mkv' -o -iname '*.mp4' -o -iname '*.avi' -o -iname '*.m4v' \
+                     -o -iname '*.mov' -o -iname '*.wmv' -o -iname '*.flv' -o -iname '*.webm' \
+                     -o -iname '*.ts' -o -iname '*.m2ts' \) -print0 2>/dev/null)
+        
+        # Build new filename using video's exact name if available
+        local base_new_name
+        if [[ -n "$video_base" ]]; then
+            base_new_name="$video_base"
+            print_verbose "Using existing video title: '$video_base'"
+        else
+            # Extract episode title - ALSO PASSING FULL PATH FOR SUBTITLES
+            local episode_title
+            episode_title=$(get_episode_title "$file_name" "$season_episode" "$detected_series" "$file")
+            print_verbose "Extracted episode title: '$episode_title'"
+            
+            # Format the new filename
+            base_new_name=$(build_filename "$season_episode" "$episode_title" "" "$detected_series")
+            base_new_name="${base_new_name%.*}"  # Remove empty extension added by build_filename
         fi
         
-        # Extract episode title - ALSO PASSING FULL PATH FOR SUBTITLES
-        local episode_title
-        episode_title=$(get_episode_title "$file_name" "$season_episode" "$detected_series" "$file")
-        print_verbose "Extracted episode title: '$episode_title'"
-        
-        # Build new filename
-        local new_file_name
-        local base_new_name
-        base_new_name=$(build_filename "$season_episode" "$episode_title" "" "$detected_series")
-        base_new_name="${base_new_name%.*}"  # Remove empty extension added by build_filename
-        
         # Add language code if present
+        local new_file_name
         if [[ -n "$lang_code" ]]; then
             new_file_name="${base_new_name}.${lang_code}.${extension}"
         else
@@ -979,7 +1015,7 @@ rename_subtitle_files() {
         # Skip if already in correct format
         if [[ "$file_name" == "$new_file_name" ]]; then
             print_status "$GREEN" "  ✓ Already formatted: $file_name"
-			continue  # Add this line to skip the safe_rename call
+            continue  # Skip the safe_rename call
         fi
         
         if safe_rename "$file" "$new_file_path" "subtitle"; then

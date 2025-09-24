@@ -5,6 +5,8 @@
 # Usage: ./rename.sh [options] [path]
 
 set -u
+set -o pipefail
+IFS=$'\n\t'
 shopt -s nocaseglob
 
 # =============================================================================
@@ -54,6 +56,44 @@ print_verbose() {
 normalize_text() {
     local text="$1"
     echo "$text" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+//g'
+}
+
+strip_outer_quotes() {
+    local s="$1"
+    if [[ "$s" =~ ^\".*\"$ ]]; then
+        echo "${s:1:${#s}-2}"
+    elif [[ "$s" =~ ^\'.*\'$ ]]; then
+        echo "${s:1:${#s}-2}"
+    else
+        echo "$s"
+    fi
+}
+
+# Create a safe temporary filename that works on WSL/Windows
+safe_temp_path() {
+    local original="$1"
+    local dir=$(dirname "$original")
+    local base=$(basename "$original")
+    
+    # Create a shorter temp name to avoid path issues
+    local timestamp=$(date +%s)
+    local safe_temp="$dir/.tmp_${timestamp}_$(echo "$base" | sed 's/[^a-zA-Z0-9._-]/_/g' | cut -c1-50).tmp"
+    
+    echo "$safe_temp"
+}
+
+# Escape special characters for use in sed regex
+escape_sed() {
+    local input="$1"
+    local result
+    result=$(printf '%s' "$input" | sed 's/[.\^$*\/\\|?+(){}[\]]/\\&/g')
+    
+    # If result is empty, return the input unchanged
+    if [[ -z "$result" ]]; then
+        printf '%s' "$input"
+    else
+        printf '%s' "$result"
+    fi
 }
 
 usage() {
@@ -212,15 +252,22 @@ get_season_episode() {
     fi
     
     # Zero-pad season and episode
-    if [[ -n "$season" && -n "$episode" ]]; then
-        [[ ${#season} -eq 1 ]] && season="0$season"
-        [[ ${#episode} -eq 1 ]] && episode="0$episode"
-        # Handle 3-digit episodes like 001 -> 001 (keep as-is)
-        [[ ${#episode} -eq 3 ]] && episode="$episode"
-        echo "S${season}E${episode}"
-    else
-        echo ""
-    fi
+	if [[ -n "$season" && -n "$episode" ]]; then
+		[[ ${#season} -eq 1 ]] && season="0$season"
+		[[ ${#episode} -eq 1 ]] && episode="0$episode"
+		# Handle 3-digit episodes like 001 -> 001 (keep as-is)
+		[[ ${#episode} -eq 3 ]] && episode="$episode"
+		echo "S${season}E${episode}"
+	elif [[ -n "$episode" ]]; then
+		# For episodes without explicit season, default to Season 01
+		# (Specials handling will be done at the caller level)
+		season="01"
+		[[ ${#episode} -eq 1 ]] && episode="0$episode"
+		[[ ${#episode} -eq 3 ]] && episode="$episode"
+		echo "S${season}E${episode}"
+	else
+		echo ""
+	fi
 }
 
 clean_title() {
@@ -231,7 +278,7 @@ clean_title() {
     if [[ -n "$series_name" ]]; then
         # Get series name without year for cleaning
         local series_no_year
-        series_no_year=$(echo "$series_name" | sed 's/ *(19[0-9][0-9])//g; s/ *(2[0-9][0-9][0-9])//g')
+        series_no_year=$(echo "$series_name" | sed 's/ *\([0-9][0-9][0-9][0-9]\)//g')
         
         # Convert series name variations to match common filename patterns
         local series_dot="${series_no_year// /.}"
@@ -239,44 +286,44 @@ clean_title() {
         local series_under="${series_no_year// /_}"
         
         # Remove series patterns (case insensitive)
-        title=$(echo "$title" | sed "s/^${series_dot}[._-]*//gi" 2>/dev/null || echo "$title")
-        title=$(echo "$title" | sed "s/^${series_dash}[._-]*//gi" 2>/dev/null || echo "$title")
-        title=$(echo "$title" | sed "s/^${series_under}[._-]*//gi" 2>/dev/null || echo "$title")
-        title=$(echo "$title" | sed "s/^${series_no_year}[._-]*//gi" 2>/dev/null || echo "$title")
+        title=$(echo "$title" | sed "s/^${series_dot}[._-]*//gI" 2>/dev/null || echo "$title")
+        title=$(echo "$title" | sed "s/^${series_dash}[._-]*//gI" 2>/dev/null || echo "$title")
+        title=$(echo "$title" | sed "s/^${series_under}[._-]*//gI" 2>/dev/null || echo "$title")
+        title=$(echo "$title" | sed "s/^${series_no_year}[._-]*//gI" 2>/dev/null || echo "$title")
         
         # Also remove series name with year patterns (like "Doctor Who 2005")
-        title=$(echo "$title" | sed "s/^${series_no_year} 2[0-9][0-9][0-9][._-]*//gi" 2>/dev/null || echo "$title")
-        title=$(echo "$title" | sed "s/^${series_no_year} 19[0-9][0-9][._-]*//gi" 2>/dev/null || echo "$title")
+        title=$(echo "$title" | sed "s/^${series_no_year} 2[0-9][0-9][0-9][._-]*//gI" 2>/dev/null || echo "$title")
+        title=$(echo "$title" | sed "s/^${series_no_year} 19[0-9][0-9][._-]*//gI" 2>/dev/null || echo "$title")
     fi
     
     # FIXED: Better technical tag removal with word boundaries and separators
     # Remove everything after common quality/codec indicators (with proper separators)
-    title=$(echo "$title" | sed -E 's/[._ -]+(720p|1080p|2160p|4K|480p|576p)([._ -].*)?$//i')
-    title=$(echo "$title" | sed -E 's/[._ -]+(x264|x265|HEVC|H\.?264|H\.?265)([._ -].*)?$//i')
-    title=$(echo "$title" | sed -E 's/[._ -]+(WEB(-DL)?|BluRay|BDRip|DVDRip|HDTV|PDTV)([._ -].*)?$//i')
-    title=$(echo "$title" | sed -E 's/[._ -]+(AMZN|NFLX|HULU|DSNP|HBO|MAX)([._ -].*)?$//i')
-    title=$(echo "$title" | sed -E 's/[._ -]+(AAC|AC3|DTS|DDP([0-9](\.[0-9])?)?)([._ -].*)?$//i')
+    title=$(echo "$title" | sed -E 's/[._ -]+(720p|1080p|2160p|4K|480p|576p)([._ -].*)?$//I')
+    title=$(echo "$title" | sed -E 's/[._ -]+(x264|x265|HEVC|H\.?264|H\.?265)([._ -].*)?$//I')
+    title=$(echo "$title" | sed -E 's/[._ -]+(WEB(-DL)?|BluRay|BDRip|DVDRip|HDTV|PDTV)([._ -].*)?$//I')
+    title=$(echo "$title" | sed -E 's/[._ -]+(AMZN|NFLX|HULU|DSNP|HBO|MAX)([._ -].*)?$//I')
+    title=$(echo "$title" | sed -E 's/[._ -]+(AAC|AC3|DTS|DDP([0-9](\.[0-9])?)?)([._ -].*)?$//I')
     
     # Restore missing ws cleanup
-    title=$(echo "$title" | sed 's/[._-]*ws[._-]*/ /gi')
+    title=$(echo "$title" | sed 's/[._-]*ws[._-]*/ /gI')
     
     # Remove only technical parentheses, preserve meaningful ones
-	title=$(echo "$title" | sed 's/([^)]*\(720p\|1080p\|2160p\|4K\|480p\|576p\|x264\|x265\|HEVC\|BluRay\|WEB\|HDTV\)[^)]*)//gi')
+	title=$(echo "$title" | sed 's/([^)]*\(720p\|1080p\|2160p\|4K\|480p\|576p\|x264\|x265\|HEVC\|BluRay\|WEB\|HDTV\)[^)]*)//gI')
     title=$(echo "$title" | sed 's/\[[^]]*\]//g')
     
     # FIXED: Better release group removal (case-insensitive, handles lowercase) NEW: (only strip ALLCAPS or contains digits, 3+ chars)
     title=$(echo "$title" | sed -E 's/-([A-Z0-9]{3,}|[A-Za-z0-9]*[0-9][A-Za-z0-9]*)$//')
     
     # Remove technical abbreviations that survived
-    title=$(echo "$title" | sed -E 's/(^|[._ -])(DL|DDP?)([._ -]|$)/\1\3/Ig')
+    title=$(echo "$title" | sed -E 's/(^|[._ -])(DL|DDP?)([._ -]|$)/\1\3/gI')
     
     # Remove common tags as whole words
-    title=$(echo "$title" | sed 's/\b\(FIXED\|REPACK\|PROPER\|INTERNAL\|EXTENDED\|UNCUT\|DIRECTORS\|CUT\)\b//gi')
+    title=$(echo "$title" | sed 's/\b\(FIXED\|REPACK\|PROPER\|INTERNAL\|EXTENDED\|UNCUT\|DIRECTORS\|CUT\)\b//gI')
     
     # Remove file extensions
-    title=$(echo "$title" | sed 's/\.mkv$//i')
-    title=$(echo "$title" | sed 's/\.mp4$//i')
-    title=$(echo "$title" | sed 's/\.avi$//i')
+    title=$(echo "$title" | sed 's/\.mkv$//I')
+    title=$(echo "$title" | sed 's/\.mp4$//I')
+    title=$(echo "$title" | sed 's/\.avi$//I')
     
     # Normalize spacing and punctuation
     title=$(echo "$title" | sed 's/[._]/ /g')
@@ -372,19 +419,21 @@ get_episode_title() {
     
     # Start with just the filename without extension
     title="${filename%.*}"
-    
+   
     # Remove season/episode patterns first
     title=$(echo "$title" | sed "s/[Ss][0-9][0-9]*[[:space:]_.-]*[Ee][0-9][0-9]*[._ -]*//")
+	title=$(echo "$title" | sed "s/[Ss][0-9][0-9]*[[:space:]_.-]*[Ee][0-9][0-9]*[._ -]*//")
     title=$(echo "$title" | sed "s/[0-9][0-9]*x[0-9][0-9]*[._-]*//")
+	title=$(echo "$title" | sed "s/[0-9][0-9]*x[0-9][0-9]*[._-]*//")
     
     # Remove series name and year combo (like "Doctor Who 2006")
     if [[ -n "$series_name" ]]; then
-        local series_no_year
-        series_no_year=$(echo "$series_name" | sed 's/ *(19[0-9][0-9])//g; s/ *(2[0-9][0-9][0-9])//g')
-        # Remove series with any year
-        title=$(echo "$title" | sed "s/^${series_no_year} [12][0-9][0-9][0-9] *//i" 2>/dev/null || echo "$title")
-        # Remove just series name
-        title=$(echo "$title" | sed "s/^${series_no_year} *//i" 2>/dev/null || echo "$title")
+        local series_no_year series_no_year_esc
+		series_no_year=$(echo "$series_name" | sed -E 's/ *\([0-9]{4}\)//g')
+		series_no_year_esc=$(escape_sed "$series_no_year")
+		title=$(echo "$title" | sed "s|^${series_no_year_esc} [12][0-9][0-9][0-9] *||I" 2>/dev/null || echo "$title")
+		title=$(echo "$title" | sed "s|^${series_no_year_esc} *||I" 2>/dev/null || echo "$title")
+		
 		# If we ended up with a leading "(YYYY) - - " or "(YYYY) - ", drop it
 		title=$(echo "$title" | sed -E 's/^\([12][0-9]{3}\)[[:space:]]*-[[:space:]]*-[[:space:]]*//')
 		title=$(echo "$title" | sed -E 's/^\([12][0-9]{3}\)[[:space:]]*-[[:space:]]*//')
@@ -443,7 +492,7 @@ get_episode_title() {
     title=$(echo "$title" | sed "s/^[12][0-9][0-9][0-9][[:space:]]*//") 
     
     # Final cleanup of common tags that might have survived
-    title=$(echo "$title" | sed "s/\b\(FIXED\|REPACK\|PROPER\|INTERNAL\)\b//gi")
+    title=$(echo "$title" | sed "s/\b\(FIXED\|REPACK\|PROPER\|INTERNAL\)\b//gI")
     title=$(echo "$title" | sed "s/  */ /g")
     title=$(echo "$title" | sed "s/^ *//; s/ *$//")
 	
@@ -652,21 +701,11 @@ deep_clean_mkv() {
     print_verbose "Cleaning internal metadata for: $(basename "$file")"
     
     # Build single command with all edits
-    local cmd=(mkvpropedit --quiet)
-    
-    # Add container title edit
-    cmd+=(--edit info --set "title=$clean_title")
-    
-    # Get track count and add track edits
-    local track_count
-    if track_count=$(mkvmerge -i "$file" 2>/dev/null | grep -c "Track ID"); then
-        for ((i=1; i<=track_count; i++)); do
-            cmd+=(--edit "track:$i" --delete name)
-        done
-    fi
-    
-    # Add file at the end
-    cmd+=("$file")
+	local cmd=(mkvpropedit --quiet
+           --edit info --set "title=$clean_title"
+           --tags all:
+           --edit track:@all --delete name
+           "$file")
     
     if [[ "$dry_run" == true ]]; then
         print_status "$YELLOW" "  [DRY] Would clean metadata: $(basename "$file")"
@@ -692,10 +731,15 @@ deep_clean_mp4() {
     fi
     
     # Check current metadata to see if cleaning is needed
-    local current_title=""
-    if command -v mediainfo >/dev/null 2>&1; then
-        current_title=$(mediainfo --Output='General;%Title%' "$file" 2>/dev/null | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')
-    fi
+	local current_title=""
+	if command -v mediainfo >/dev/null 2>&1; then
+		current_title=$(mediainfo --Output='General;%Title%' "$file" 2>/dev/null | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')
+		current_title=$(strip_outer_quotes "$current_title")
+		# Normalize mediainfo N/A responses to empty
+		case "${current_title,,}" in
+			"n/a"|"na"|"none") current_title="";;
+		esac
+	fi
     
     # Skip if no title or title is already clean
     if [[ -z "$current_title" || "$current_title" == "$clean_title" ]]; then
@@ -709,14 +753,30 @@ deep_clean_mp4() {
     norm_clean=$(normalize_text "$clean_title")
     
     # Only clean if the current title contains technical indicators or is significantly different
-    if [[ "$norm_current" != *"720p"* && "$norm_current" != *"1080p"* && \
-          "$norm_current" != *"x264"* && "$norm_current" != *"x265"* && \
-          "$norm_current" != *"web"* && "$norm_current" != *"bluray"* && \
-          "$norm_current" != *"hdtv"* && "$norm_current" != *"webrip"* && \
-          "$norm_current" == "$norm_clean"* ]]; then
-        print_verbose "MP4 title looks clean, skipping: '$current_title'"
-        return 0
-    fi
+	local should_clean=false
+	local clean_reason=""
+
+	# Check for technical indicators
+	if [[ "$norm_current" == *"720p"* || "$norm_current" == *"1080p"* || \
+		"$norm_current" == *"x264"* || "$norm_current" == *"x265"* || \
+		"$norm_current" == *"web"* || "$norm_current" == *"bluray"* || \
+		"$norm_current" == *"hdtv"* || "$norm_current" == *"webrip"* ]]; then
+		should_clean=true
+		clean_reason="contains technical metadata indicators"
+	elif [[ "$norm_current" != "$norm_clean"* ]]; then
+		should_clean=true
+		clean_reason="title differs significantly from expected clean format"
+	elif [[ "$current_title" =~ ^[\'\"]. ]]; then
+		should_clean=true
+		clean_reason="title contains surrounding quotes indicating metadata artifacts"
+	fi
+
+	if [[ "$should_clean" != true ]]; then
+		print_verbose "MP4 title looks clean, skipping: '$current_title'"
+		return 0
+	fi
+
+	print_verbose "MP4 cleaning triggered: $clean_reason"
 	
 	# Check file permissions (skip in dry-run mode)
     if [[ "$dry_run" != true ]] && ! check_file_writable "$file"; then
@@ -727,29 +787,57 @@ deep_clean_mp4() {
     print_verbose "Cleaning MP4 metadata for: $(basename "$file") (current title: '$current_title')"
     
     if [[ "$dry_run" == true ]]; then
-        print_status "$YELLOW" "  [DRY] Would clean MP4 metadata: $(basename "$file")"
-        print_verbose "Would change title from: '$current_title' to: '$clean_title'"
-    else
-        # Create temporary file
-        local temp_file="${file}.tmp"
-        
-        # Build ffmpeg command to clean metadata and set new title
-        local cmd=(ffmpeg -i "$file" -c copy -map_metadata -1)
-        cmd+=(-metadata "title=$clean_title")
-        cmd+=(-y "$temp_file")
-        
-        if "${cmd[@]}" 2>/dev/null; then
-            if mv "$temp_file" "$file" 2>/dev/null; then
-                print_status "$GREEN" "  ✓ Cleaned MP4 metadata: $(basename "$file")"
-            else
-                print_status "$RED" "  ✗ Failed to replace file: $(basename "$file")"
-                rm -f "$temp_file" 2>/dev/null
-            fi
-        else
-            print_status "$RED" "  ✗ Failed to clean MP4 metadata: $(basename "$file")"
-            rm -f "$temp_file" 2>/dev/null
-        fi
-    fi
+		print_status "$YELLOW" "  [DRY] Would clean MP4 metadata: $(basename "$file")"
+		print_verbose "Would change title from: '$current_title' to: '$clean_title'"
+	else
+		local LOG_DIR="$BASE_PATH/.rename_logs"
+		mkdir -p "$LOG_DIR" 2>/dev/null || true
+    
+		# Use a local temp file to avoid WSL path issues
+		local temp_file
+		temp_file=$(safe_temp_path "$file")
+		local err_log="$LOG_DIR/ffmpeg_$(basename "$file" | sed 's/[^a-zA-Z0-9._-]/_/g').log"
+    
+		# Keep all streams; quiet errors; set title; clear global metadata
+		local cmd=(ffmpeg -hide_banner -nostdin -v error -i "$file" \
+			-map 0 -c copy -map_metadata -1 \
+			-metadata "title=$clean_title" \
+			-movflags use_metadata_tags \
+			-y "$temp_file")
+    
+		if "${cmd[@]}" 2>"$err_log"; then
+			if mv "$temp_file" "$file" 2>/dev/null; then
+				print_status "$GREEN" "  ✓ Cleaned MP4 metadata: $(basename "$file")"
+				rm -f "$err_log" 2>/dev/null
+			else
+				print_status "$RED" "  ✗ Failed to replace file: $(basename "$file")"
+				rm -f "$temp_file" 2>/dev/null
+				print_verbose "See error log: $err_log"
+			fi
+		else
+			# Try AtomicParsley as fallback if available
+			if command -v AtomicParsley >/dev/null 2>&1; then
+				print_verbose "ffmpeg failed; attempting AtomicParsley fallback"
+				if AtomicParsley "$file" --title "$clean_title" --overWrite 2>>"$err_log"; then
+					print_status "$GREEN" "  ✓ Cleaned MP4 metadata with AtomicParsley: $(basename "$file")"
+					rm -f "$err_log" 2>/dev/null
+				else
+					print_status "$RED" "  ✗ Failed to clean MP4 metadata: $(basename "$file")"
+					local reason
+					reason=$(tail -n 3 "$err_log" | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g')
+					[[ -n "$reason" ]] && print_verbose "Reason: $reason"
+					print_verbose "Full log: $err_log"
+				fi
+			else
+				print_status "$RED" "  ✗ Failed to clean MP4 metadata: $(basename "$file")"
+				local reason
+				reason=$(tail -n 3 "$err_log" | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g')
+				[[ -n "$reason" ]] && print_verbose "Reason: $reason"
+				print_verbose "Full log: $err_log"
+			fi
+			rm -f "$temp_file" 2>/dev/null
+		fi
+	fi
 }
 
 # Generic metadata cleanup function
@@ -812,12 +900,12 @@ safe_rename() {
     # In the "already correct" section, add this line:
 	if [[ "$old_path" == "$new_path" ]]; then
 		print_status "$GREEN" "  ✓ Already correct: $(basename "$new_path")"
-    
+
 		# Still handle companion files and metadata cleanup for video files
 		if [[ "$type" == "file" ]]; then
-			companion_rename "$old_path" "$new_path" false
+			companion_rename "$old_path" "$new_path" "$DRY_RUN"
 			if [[ "$DEEP_CLEAN" == true ]]; then
-				deep_clean_metadata "$new_path" "$(basename "${new_path%.*}")" false
+				deep_clean_metadata "$new_path" "$(basename "${new_path%.*}")" "$DRY_RUN"
 			fi
 		fi
 		return 0
@@ -844,20 +932,39 @@ safe_rename() {
             fi
         fi
     else
-        if mv "$old_path" "$new_path" 2>/dev/null; then
-            print_status "$GREEN" "  ✓ Renamed $type: $(basename "$old_path") → $(basename "$new_path")"
-            
-            # Handle companion files and metadata cleanup for video files
-            if [[ "$type" == "file" ]]; then
-                companion_rename "$old_path" "$new_path" false
-                if [[ "$DEEP_CLEAN" == true ]]; then
-                    deep_clean_metadata "$new_path" "$(basename "${new_path%.*}")" false
-                fi
-            fi
-        else
-            print_status "$RED" "  ✗ Failed to rename $type: $(basename "$old_path")"
-            return 1
-        fi
+        # Handle case-only renames on case-insensitive filesystems
+		if [[ -e "$new_path" ]] && \
+		   [[ "$(tr '[:upper:]' '[:lower:]' <<<"$old_path")" = "$(tr '[:upper:]' '[:lower:]' <<<"$new_path")" ]] && \
+		   [[ "$old_path" != "$new_path" ]]; then
+			local tmp="${new_path}.__tmp__"
+			if mv "$old_path" "$tmp" 2>/dev/null && mv "$tmp" "$new_path" 2>/dev/null; then
+				print_status "$GREEN" "  ✓ Renamed $type (case hop): $(basename "$old_path") → $(basename "$new_path")"
+				# Handle companion files and metadata cleanup for video files
+				if [[ "$type" == "file" ]]; then
+					companion_rename "$old_path" "$new_path" "$DRY_RUN"
+					if [[ "$DEEP_CLEAN" == true ]]; then
+						deep_clean_metadata "$new_path" "$(basename "${new_path%.*}")" "$DRY_RUN"
+					fi
+				fi
+				return 0
+			else
+				print_status "$RED" "  ✗ Failed to rename $type (case hop): $(basename "$old_path")"
+				return 1
+			fi
+		elif mv "$old_path" "$new_path" 2>/dev/null; then
+			print_status "$GREEN" "  ✓ Renamed $type: $(basename "$old_path") → $(basename "$new_path")"
+			
+			# Handle companion files and metadata cleanup for video files
+			if [[ "$type" == "file" ]]; then
+				companion_rename "$old_path" "$new_path" "$DRY_RUN"
+				if [[ "$DEEP_CLEAN" == true ]]; then
+					deep_clean_metadata "$new_path" "$(basename "${new_path%.*}")" "$DRY_RUN"
+				fi
+			fi
+		else
+			print_status "$RED" "  ✗ Failed to rename $type: $(basename "$old_path")"
+			return 1
+		fi
     fi
     return 0
 }
@@ -882,7 +989,7 @@ rename_episode_files() {
     fi
     
     # Process video files
-    while IFS= read -r file; do
+    while IFS= read -r -d '' file; do
         [[ -z "$file" ]] && continue
         [[ ! -f "$file" ]] && continue
         
@@ -897,6 +1004,13 @@ rename_episode_files() {
         # Extract season and episode
         local season_episode
         season_episode=$(get_season_episode "$file_name")
+		# Handle Specials folders - override season to 00
+		# Handle Specials folders - override season to 00
+		if [[ -n "$season_episode" ]] && [[ "$(basename "$file_dir")" =~ ^[Ss]pecials?$ ]]; then
+			# Force S00 regardless of what season was parsed
+			season_episode="S00E${season_episode##*E}"
+			print_verbose "Detected Specials folder, using season 00: $season_episode"
+		fi
         if [[ -z "$season_episode" ]]; then
             print_status "$RED" "  ✗ Could not extract episode info from: $file_name"
             continue
@@ -920,7 +1034,7 @@ rename_episode_files() {
             renamed_count=$((renamed_count + 1))
         fi
         
-    done < <(find "$BASE_PATH" -type f \( -iname '*.mkv' -o -iname '*.mp4' -o -iname '*.avi' -o -iname '*.m4v' -o -iname '*.mov' -o -iname '*.wmv' -o -iname '*.flv' -o -iname '*.webm' -o -iname '*.ts' -o -iname '*.m2ts' \) 2>/dev/null)
+	done < <(find "$BASE_PATH" -type f \( -iname '*.mkv' -o -iname '*.mp4' -o -iname '*.avi' -o -iname '*.m4v' -o -iname '*.mov' -o -iname '*.wmv' -o -iname '*.flv' -o -iname '*.webm' -o -iname '*.ts' -o -iname '*.m2ts' \) -print0 2>/dev/null)
     
     print_status "$CYAN" "  Processed $file_count files, renamed $renamed_count"
 }
@@ -939,7 +1053,7 @@ rename_subtitle_files() {
     fi
     
     # Process subtitle files
-    while IFS= read -r file; do
+    while IFS= read -r -d '' file; do
         [[ -z "$file" ]] && continue
         [[ ! -f "$file" ]] && continue
         
@@ -1022,8 +1136,8 @@ rename_subtitle_files() {
             renamed_count=$((renamed_count + 1))
         fi
         
-    done < <(find "$BASE_PATH" -type f \( -iname '*.srt' -o -iname '*.sub' -o -iname '*.ass' -o -iname '*.ssa' -o -iname '*.vtt' \) 2>/dev/null)
-    
+    done < <(find "$BASE_PATH" -type f \( -iname '*.srt' -o -iname '*.sub' -o -iname '*.ass' -o -iname '*.ssa' -o -iname '*.vtt' \) -print0 2>/dev/null)
+	
     if [[ $sub_count -gt 0 ]]; then
         print_status "$CYAN" "  Processed $sub_count subtitle files, renamed $renamed_count"
     fi

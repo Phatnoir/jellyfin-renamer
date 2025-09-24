@@ -691,8 +691,8 @@ deep_clean_mkv() {
         print_verbose "mkvpropedit not found - skipping internal metadata cleanup"
         return 0
     fi
-	
-	# Check file permissions (skip in dry-run mode)
+    
+    # Check file permissions (skip in dry-run mode)
     if [[ "$dry_run" != true ]] && ! check_file_writable "$file"; then
         print_status "$YELLOW" "  ! Skipping metadata cleanup - permission denied: $(basename "$file")"
         return 0
@@ -700,21 +700,80 @@ deep_clean_mkv() {
     
     print_verbose "Cleaning internal metadata for: $(basename "$file")"
     
-    # Build single command with all edits
-	local cmd=(mkvpropedit --quiet
-           --edit info --set "title=$clean_title"
-           --tags all:
-           --edit track:@all --delete name
-           "$file")
+    # Check what metadata exists before cleaning
+    if command -v mkvmerge >/dev/null 2>&1; then
+        local track_info
+        track_info=$(mkvmerge -i "$file" 2>/dev/null)
+        print_verbose "Track info: $track_info"
+    fi
+    
+    # Set container title and clear tags first
+    local cmd=(mkvpropedit --quiet
+               --edit info --set "title=$clean_title"
+               --tags all:
+               "$file")
     
     if [[ "$dry_run" == true ]]; then
         print_status "$YELLOW" "  [DRY] Would clean metadata: $(basename "$file")"
         print_verbose "Command: ${cmd[*]}"
+        
+        # Show what track commands would be run
+        local track_ids
+        if command -v mkvmerge >/dev/null 2>&1; then
+            mapfile -t track_ids < <(mkvmerge -i "$file" 2>/dev/null | sed -n 's/.*Track ID \([0-9]\+\):.*/\1/p')
+            if [[ ${#track_ids[@]} -eq 0 ]]; then
+                print_verbose "No track IDs found - track name clearing may not work"
+            else
+                print_verbose "Found track IDs: ${track_ids[*]}"
+                for tid in "${track_ids[@]}"; do
+                    print_verbose "Would clear track @$tid name"
+                done
+            fi
+        fi
     else
+        local changes_made=false
+        
+        # Execute container title and tags cleanup
         if "${cmd[@]}" 2>/dev/null; then
-            print_status "$GREEN" "  ✓ Cleaned metadata: $(basename "$file")"
+            print_verbose "Container metadata cleaned"
+            changes_made=true
+            
+            # Now clear individual track names
+            if command -v mkvmerge >/dev/null 2>&1; then
+                local track_ids
+                mapfile -t track_ids < <(mkvmerge -i "$file" 2>/dev/null | sed -n 's/.*Track ID \([0-9]\+\):.*/\1/p')
+                
+                if [[ ${#track_ids[@]} -eq 0 ]]; then
+                    print_verbose "No track IDs found - unable to clear track names"
+                else
+                    print_verbose "Found track IDs: $(IFS=' '; echo "${track_ids[*]}")"
+                    for tid in "${track_ids[@]}"; do
+						# Suppress all output from mkvpropedit to prevent system error messages
+						if mkvpropedit --quiet "$file" --edit "track:@$tid" --delete name &>/dev/null; then
+							print_verbose "Cleared track @$tid name"
+							changes_made=true
+						else
+							local exit_code=$?
+							if [[ $exit_code -eq 2 ]]; then
+								print_verbose "Track @$tid has no name property to clear"
+							else
+								print_verbose "Failed to clear track @$tid name (exit code: $exit_code)"
+							fi
+						fi
+					done
+                fi
+            else
+                print_verbose "mkvmerge not available - cannot clear individual track names"
+            fi
+            
+            if [[ "$changes_made" == true ]]; then
+                print_status "$GREEN" "  ✓ Cleaned metadata: $(basename "$file")"
+            else
+                print_status "$BLUE" "  ~ No metadata changes needed: $(basename "$file")"
+            fi
         else
-            print_verbose "Metadata cleanup failed: $file"
+            print_verbose "Container metadata cleanup failed: $file"
+            return 1
         fi
     fi
 }

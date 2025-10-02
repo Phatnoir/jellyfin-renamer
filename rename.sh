@@ -964,7 +964,7 @@ safe_rename() {
 		if [[ "$type" == "file" ]]; then
 			companion_rename "$old_path" "$new_path" "$DRY_RUN"
 			if [[ "$DEEP_CLEAN" == true ]]; then
-				deep_clean_metadata "$new_path" "$(basename "${new_path%.*}")" "$DRY_RUN"
+				deep_clean_metadata "$old_path" "$(basename "${new_path%.*}")" "$DRY_RUN"
 			fi
 		fi
 		return 0

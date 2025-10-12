@@ -3,121 +3,76 @@
 ## Recently Completed ✅
 
 ### Enhanced Boundary & Title Extraction
-**Problems solved:** Files like "Doctor.Who.2005.S05E04.Time.Of.The.Angels.HDTV.XviD-FoV.avi" were producing incorrect titles like `The Angels HDTV FoV`
+- Enhanced boundary detection for cleaner title extraction
+- Technical vs. meaningful parentheses handling (preserve "Part 1", drop "720p")
+- Case-insensitive release group removal
+- Subtitle support with language code preservation
+- Multiple output formats via `--format` flag
+- Anime mode with fansub pattern support
 
-**Solutions implemented:**
-- **Enhanced boundary detection** that identifies where technical metadata starts (quality indicators, codecs, etc.) and cuts the title there
-- **Fixed:** Technical parentheses now dropped while preserving meaningful ones like `(Part 1)`, `(Director's Cut)`
-- **Fixed:** Release group removal works case-insensitively (uppercase/lowercase groups)
-- **Fixed:** Deduplication of double separators (`--`) after series/year cleanup
-- **Improved:** Cleaner handling of orphaned years and leading dashes
-- **Added:** Subtitle support with language code preservation (`.en.srt`, `.eng.srt`)
-- **Added:** Multiple output formats with `--format` flag supporting 6 different naming schemes
-- **Added:** Anime mode (`--anime`) with default `Show - SxxExx` format and fansub pattern support
+### MP4 Metadata Deep-Clean
+- Deep-clean mode removes technical metadata from MP4/MKV containers
+- Companion file renaming for subtitles and sidecars
+- Automated Python testing infrastructure
+- Enhanced verbose logging for debugging
+
+**Current status:** Bash version feature-complete and stable at ~1,300 lines.
+
+---
+
+## Primary Focus: Python Migration 🎯
+
+### Why Migrate
+- Script has outgrown bash (1,300 lines, complex interdependencies)
+- Difficult to test and maintain
+- Security concerns (command injection, unsafe temp files)
+- Every fix adds complexity instead of reducing it
+
+### What We Gain
+- 40-50% smaller codebase (~800 lines vs 1,300)
+- Automated testing with pytest
+- Better security by default
+- Clearer structure and easier debugging
+- Same user experience (identical CLI)
+
+### Migration Approach
+1. Extract bash behavior into Python unit tests (establish ground truth)
+2. Build Python modules one at a time, test-driven
+3. Validate Python output matches bash output
+4. Keep ALL bespoke rules (anime patterns, specials handling, title extraction logic)
+
+**Zero functionality loss** - we're translating, not redesigning.
 
 ---
 
 ## Future Enhancements
+*(Much easier once migrated to Python)*
 
-### 1. External Episode Database Integration
-Cross-reference episode titles with external APIs for validation and correction:
+### API Integration
+- External episode database lookup (TMDB, TVMaze, IMDB)
+- Validate and fill in missing episode titles
+- Handle special episodes outside standard patterns
 
-**Proposed APIs:**
-- **TMDB (The Movie Database)** - Free API with good TV coverage
-- **IMDB** - Comprehensive but more complex to access
-- **TVMaze** - Simple API, good for episode listings
+### Interactive Mode
+- Manual review for edge cases
+- User approval/editing of suggested renames
+- Smart suggestions based on detected patterns
 
-**Use cases:**
-- Validate extracted titles against known episode names
-- Fill in missing titles when boundary detection fails
-- Correct minor extraction errors (punctuation, capitalization)
-- Handle special episodes that don't follow standard patterns
-
-**Implementation approach:**
-- Add `--lookup` flag to enable API checking
-- Cache results locally to avoid repeated API calls
-- Fallback gracefully when API is unavailable or rate-limited
-- Keep it completely optional to preserve existing workflow
-
-### 2. Interactive/Manual Renaming Mode
-Handle edge cases where auto-detection fails:
-
-**Problem scenarios:**
-- Specials that don't match S00Exx patterns
-- Episodes with unusual naming conventions
-- Files where title extraction completely fails
-- Mixed episode formats in the same series
-
-**Proposed solution:**
-- Add `--interactive` flag for manual review mode
-- Present suggested renames for user approval/editing
-- Provide smart suggestions based on detected patterns
-
-**Interface concept:**
-```
-Found: "Doctor.Who.Christmas.Special.2023.mkv"
-Detected: No standard episode pattern
-Suggested: "Doctor Who (2005) - S00E01.mkv"
-Options: [A]ccept, [E]dit title, [S]kip, [Q]uit
-```
-
-### 3. Additional Pattern Recognition
-Expand pattern support for edge cases:
-
-- **Multi-part episodes:** Better handling beyond current `(Part 1)` preservation
-- **Broader anime numbering:** Support for OVAs, movies, and non-standard episode counts
-- **Movie/special conventions:** Christmas specials, anniversary episodes, etc.
-- **Date-based formats:** News shows, daily content with YYYY-MM-DD patterns
-- **Anthology series:** Different naming requirements for shows like Black Mirror
-
-### 4. Quality of Life Improvements
-Enhance user experience and workflow:
-
-**Configuration system:**
-- Support for `.renamerrc` config file for default preferences
-- Per-directory configuration overrides
+### Configuration System
+- `.renamerrc` for default preferences
+- Per-directory overrides
 - Project-specific naming schemes
 
-**Safety and convenience:**
-- Undo functionality via rename operation logs
-- Batch processing with progress indicators
-- Resume capability for interrupted large operations
-- Integration hooks for media server APIs (Jellyfin, Plex) for automatic library refresh
-
-**Performance:**
-- Parallel processing for large libraries
-- Memory-efficient processing of huge directory structures
-- Smarter caching of series detection results
+### Quality of Life
+- Undo functionality via operation logs
+- Progress bars for large batches
+- Parallel processing
+- Resume capability for interrupted operations
 
 ---
 
-## Low Priority / Nice to Have
+## Key Principle
 
-- **Web interface** for remote library management
-- **Docker container** for easy deployment and isolation
-- **Plugin system** for custom naming schemes and corporate environments
-- **Integration with download managers** (Sonarr, Radarr) for automated post-processing
-- **Machine learning** title extraction for particularly messy filename patterns
+**The goal:** Transform from "I hope this works" to "I know this works because tests prove it."
 
----
-
-## Implementation Notes
-
-### API Integration Guidelines
-- Keep all external features completely optional
-- Handle rate limiting gracefully with exponential backoff
-- Provide robust offline fallback mode
-- Consider privacy implications and allow opt-out
-- Cache API responses locally to minimize requests
-
-### Compatibility Considerations
-- Maintain strict backward compatibility with existing command-line interface
-- Test with various filesystem limitations (path length, special characters)
-- Ensure cross-platform compatibility (Linux, macOS, Windows/WSL)
-- Preserve dry-run safety as the default behavior
-
-### Code Quality
-- Maintain current modular function structure
-- Add comprehensive test coverage for new features
-- Document all new command-line options thoroughly
-- Keep dependencies minimal (pure Bash + standard Unix tools)
+Migration isn't about adding features - it's about building a foundation where features can be added safely.

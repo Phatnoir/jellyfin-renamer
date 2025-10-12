@@ -836,6 +836,7 @@ deep_clean_mp4() {
 	fi
 
 	print_verbose "MP4 cleaning triggered: $clean_reason"
+	print_verbose "Running ffmpeg with title: '$clean_title'"
 	
 	# Check file permissions (skip in dry-run mode)
     if [[ "$dry_run" != true ]] && ! check_file_writable "$file"; then
@@ -856,24 +857,37 @@ deep_clean_mp4() {
 		local temp_file
 		temp_file=$(safe_temp_path "$file")
 		local err_log="$LOG_DIR/ffmpeg_$(basename "$file" | sed 's/[^a-zA-Z0-9._-]/_/g').log"
+		
+		print_verbose "Temp file: $temp_file"
+		print_verbose "Error log: $err_log"
     
 		# Keep all streams; quiet errors; set title; clear global metadata
 		local cmd=(ffmpeg -hide_banner -nostdin -v error -i "$file" \
 			-map 0 -c copy -map_metadata -1 \
 			-metadata "title=$clean_title" \
 			-movflags use_metadata_tags \
+			-f mp4 \
 			-y "$temp_file")
+		
+		print_verbose "Running: ${cmd[*]}"
     
 		if "${cmd[@]}" 2>"$err_log"; then
+			print_verbose "ffmpeg succeeded, attempting to move temp file"
+			
 			if mv "$temp_file" "$file" 2>/dev/null; then
 				print_status "$GREEN" "  ✓ Cleaned MP4 metadata: $(basename "$file")"
 				rm -f "$err_log" 2>/dev/null
 			else
 				print_status "$RED" "  ✗ Failed to replace file: $(basename "$file")"
+				print_verbose "mv command failed: mv '$temp_file' '$file'"
 				rm -f "$temp_file" 2>/dev/null
 				print_verbose "See error log: $err_log"
 			fi
 		else
+			print_verbose "ffmpeg returned error code: $?"
+			print_verbose "Error log contents:"
+			[[ -f "$err_log" ]] && print_verbose "$(cat "$err_log")"
+			
 			# Try AtomicParsley as fallback if available
 			if command -v AtomicParsley >/dev/null 2>&1; then
 				print_verbose "ffmpeg failed; attempting AtomicParsley fallback"
@@ -893,6 +907,14 @@ deep_clean_mp4() {
 				reason=$(tail -n 3 "$err_log" | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g')
 				[[ -n "$reason" ]] && print_verbose "Reason: $reason"
 				print_verbose "Full log: $err_log"
+				
+				#Claude included these lines to always display the error. Might not be needed. 
+				if [[ -f "$err_log" ]]; then
+					print_status "$RED" "  Error details:"
+					while IFS= read -r line; do
+						print_status "$RED" "    $line"
+					done < "$err_log"
+				fi
 			fi
 			rm -f "$temp_file" 2>/dev/null
 		fi

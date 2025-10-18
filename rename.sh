@@ -361,7 +361,7 @@ safe_episode_title() {
     if [[ -z "$title" ]] || \
        [[ "$norm_title" == "$norm_series" ]] || \
        [[ "$norm_title" == "$norm_series_no_year" ]] || \
-       [[ "$norm_title" == *"$norm_series_no_year"* ]] || \
+       [[ "$norm_title" =~ (^|[^a-z])${norm_series_no_year}([^a-z]|$) ]] || \
        [[ "$norm_series_no_year" == *"$norm_title"* ]] || \
        [[ "$norm_title" =~ ^(episode|ep)?0*[0-9]+$ ]]; then
         print_verbose "Title rejected: blank, contains/matches series name, or generic episode reference"
@@ -1009,7 +1009,7 @@ safe_rename() {
         if [[ "$type" == "file" ]]; then
             companion_rename "$old_path" "$new_path" true
             if [[ "$DEEP_CLEAN" == true ]]; then
-                deep_clean_metadata "$new_path" "$(basename "${new_path%.*}")" true
+                deep_clean_metadata "$old_path" "$(basename "${new_path%.*}")" true
             fi
         fi
     else

@@ -1,29 +1,25 @@
 # Universal Media Renamer for Jellyfin/Plex
 
-A smart, cross-platform Bash script that renames TV show files so they work perfectly with Jellyfin, Plex, and other media servers — without breaking your existing structure.
+A smart, cross-platform Bash script that renames TV show files so they work perfectly with Jellyfin, Plex, and other media servers without breaking your existing folder structure.
 
 > ⚠️ **Disclaimer**  
-> This script is under active development.  
-> Always use `--dry-run` first and test on backups or small batches.  
-> Pull requests, feedback, and issues are welcome!
+> This script is under active development. Always use `--dry-run` first and test on backups or small batches. Pull requests, feedback, and issues are welcome!
 
 ---
 
-## Recent Improvements
+## The Problem
 
-* **FIXED**: Sidecar file renaming now works reliably on case-insensitive filesystems (WSL/NTFS)
-* **FIXED**: Subtitles no longer get renamed twice with different titles than their video files
-* **FIXED**: Episode titles with hyphens (like "Ch-ch-changes") are now preserved correctly
-* **FIXED**: Episode pattern matching now supports spaced formats like `S01 E01` in addition to `S01E01`
-* **FIXED**: Subtitle files are no longer processed twice when using `--deep-clean`
-* **IMPROVED**: Enhanced language code detection supports more formats (EN, pt-BR, forced, etc.)
-* **IMPROVED**: Smart title validation prevents series name duplication and deduplication within seasons
-* **IMPROVED**: Enhanced metadata cleaning for MP4 files (only processes files with problematic metadata)
-* **IMPROVED**: Better handling of anime/fansub naming patterns with `--anime` flag
-* **FEATURE**: Deep metadata cleanup with `--deep-clean` for MKV and MP4 files
-* **FEATURE**: Automatic companion file renaming (subtitles, artwork, NFO files)
-* **FEATURE**: MediaInfo fallback for extracting episode titles from container metadata
-* **FEATURE**: Intelligent permission fixing for read-only files
+You have 100 TV show files with inconsistent naming like:
+- `Breaking.Bad.S01E01.Pilot.720p.WEB-DL.x264-GROUP.mkv`
+- `Doctor.Who.2005.S05E04.Time.Of.The.Angels.HDTV.XviD-FoV.avi`
+- `[Erai-raws] Cyberpunk - Edgerunners - 01 [1080p][Multiple Subtitle].mkv`
+
+Jellyfin and Plex need them consistently named:
+- `Breaking Bad (2008) - S01E01 - Pilot.mkv`
+- `Doctor Who (2005) - S05E04 - Time of the Angels.avi`
+- `Cyberpunk Edgerunners - S01E01.mkv`
+
+This script automates that transformation, handling codec tags, quality indicators, release groups, and anime/fansub formats automatically. It works safely with `--dry-run` so you preview changes before applying them.
 
 ---
 
@@ -33,60 +29,48 @@ A smart, cross-platform Bash script that renames TV show files so they work perf
 # Make executable
 chmod +x rename.sh
 
-# Preview renames (safe)
+# ALWAYS preview first (safe, shows what would change)
 ./rename.sh --dry-run "/path/to/TV Shows/Breaking Bad (2008)"
 
-# With metadata cleanup for MKV files
-./rename.sh --deep-clean --dry-run "/path/to/TV Shows/Breaking Bad (2008)"
+# Once you're happy with the preview:
+./rename.sh "/path/to/TV Shows/Breaking Bad (2008)"
 
-# For anime/fansub releases
+# For anime/fansub releases:
 ./rename.sh --anime --dry-run "/path/to/Anime/Cyberpunk Edgerunners (2022)"
 
-# Apply renames (once you're happy)
-./rename.sh "/path/to/TV Shows/Breaking Bad (2008)"
+# With metadata cleanup (removes internal codec info from files):
+./rename.sh --deep-clean --dry-run "/path/to/TV Shows/Breaking Bad (2008)"
 ```
 
----
+### Sample dry-run output
+```
+[DRY-RUN] Would rename:
+  Breaking.Bad.S01E01.Pilot.720p.WEB-DL.x264-GROUP.mkv
+→ Breaking Bad (2008) - S01E01 - Pilot.mkv
+```
 
-## Features
-
-* **Deep Metadata Cleanup**: Clean internal MKV container and track metadata with `--deep-clean`
-* **Companion File Management**: Automatically renames subtitles, artwork, and NFO files to match videos
-* **Intelligent Permission Handling**: Automatically fixes read-only file permissions when needed
-* **Dual Format Support**: Standard TV shows AND anime/fansub releases
-* **Flexible Episode Pattern Support**: Handles `S01E01`, `S01 E01`, `1x01`, `- 01 [Quality]` and more
-* **Intelligent Title Extraction**: Uses boundary detection to separate episode titles from technical metadata
-* **Smart Content Preservation**: Keeps meaningful content like "(Part 1)" while removing technical tags
-* Detects series names from folder structure automatically
-* Strips codec info, quality tags, and release group names with precision
-* Supports multiple output formats, including year preservation
-* Works on Linux, macOS, and Windows (via WSL)
-* Renames subtitle files to match episode names with language code preservation
-* Runs safely with dry-run mode and validation checks
+**Windows/WSL note**: Install MKVToolNix, FFmpeg, and MediaInfo *inside WSL*, not on Windows. The script needs them available in the WSL environment.
 
 ---
 
-## Supported Episode Patterns
+## How It Works
 
-### Standard TV Shows
-- `S01E01`, `S1E1` - Standard season/episode format
-- `S01 E01`, `S1 E1` - Spaced season/episode format
-- `S01.E01`, `S01_E01`, `S01-E01` - Various separator formats
-- `1x01`, `01x01` - Alternative season x episode format
+The script automatically:
 
-### Anime/Fansub Releases
-- `[Group] Show - 01 [Quality]` - Common fansub format
-- `Show - 01 [Metadata]` - Simplified anime format
-- Works with groups like `[Erai-raws]`, `[SubsPlease]`, `[HorribleSubs]`, etc.
-
----
-
-## Supported File Types
-
-| Type      | Extensions                                        |
-| --------- | ------------------------------------------------- |
-| **Video** | mkv, mp4, avi, m4v, mov, wmv, flv, webm, ts, m2ts |
-| **Subs**  | srt, sub, ass, ssa, vtt                           |
+- **Detects series name** from your folder structure (e.g., "Breaking Bad (2008)" → "Breaking Bad")
+- **Recognizes episode patterns**:
+  - Standard TV: `S01E01`, `S01 E01`, `1x01`, `01x01`
+  - Anime/Fansub: `[Group] Show - 01 [Quality]`, `Show - 01 [Metadata]`
+- **Extracts episode titles** using boundary detection to separate real titles from technical metadata
+- **Cleans filenames** by removing:
+  - Quality indicators (720p, 1080p, 4K, etc.)
+  - Codec info (x264, x265, HEVC)
+  - Source tags (WEB, BluRay, HDTV, etc.)
+  - Platform tags (AMZN, NFLX, HULU)
+  - Release group names and hash codes
+- **Preserves meaningful content** like "(Part 1)" or "(Director's Cut)" while removing technical junk
+- **Handles subtitles** by automatically renaming .srt files to match their video, preserving language codes
+- **Optionally cleans internal metadata** with `--deep-clean` (removes codec info embedded inside MKV/MP4 files)
 
 ---
 
@@ -94,7 +78,7 @@ chmod +x rename.sh
 
 **IMPORTANT**: This script works best with properly organized TV show folders. Each show should have its own folder:
 
-### Recommended Structure (Standard TV)
+### Recommended Structure
 ```
 TV Shows/
 ├── Breaking Bad (2008)/
@@ -113,429 +97,204 @@ TV Shows/
         └── episode files...
 ```
 
-### Anime Structure
+### What NOT to do
 ```
-Anime/
-├── Cyberpunk Edgerunners (2022)/
-│   ├── [Erai-raws] Cyberpunk - Edgerunners - 01 [1080p][Multiple Subtitle].mkv
-│   ├── [Erai-raws] Cyberpunk - Edgerunners - 02 [1080p][Multiple Subtitle].mkv
-│   └── [Erai-raws] Cyberpunk - Edgerunners - 03 [1080p][Multiple Subtitle].mkv
-└── Attack on Titan (2013)/
-    ├── [SubsPlease] Attack on Titan - 01 [1080p].mkv
-    └── [SubsPlease] Attack on Titan - 02 [1080p].mkv
+Mixed Folder/
+├── Breaking.Bad.S01E01.mkv          ← Will become "Mixed Folder - S01E01.mkv"
+├── Doctor.Who.S05E04.avi            ← Will become "Mixed Folder - S05E04.avi"
+└── 3.Body.Problem.S01E01.mkv        ← Will become "Mixed Folder - S01E01.mkv"
 ```
-
-### Also Works (Show folder without season subfolders)
-```
-TV Shows/
-├── Breaking Bad (2008)/
-│   ├── Breaking.Bad.S01E01.Pilot.720p.WEB-DL.x264-GROUP.mkv
-│   └── Breaking.Bad.S01E02.Cat's.in.the.Bag.720p.WEB-DL.x264-GROUP.mkv
-└── Doctor Who (2005)/
-    └── Doctor.Who.2005.S05E04.Time.Of.The.Angels.HDTV.XviD-FoV.avi
-```
-
-### ⚠️ What NOT to do (Mixed shows in one folder)
-```
-Mixed Folder/  ← Script will think "Mixed Folder" is the series name!
-├── Breaking.Bad.S01E01.mkv  ← Will become "Mixed Folder - S01E01.mkv"
-├── Doctor.Who.S05E04.avi    ← Will become "Mixed Folder - S05E04.avi"
-└── 3.Body.Problem.S01E01.mkv ← Will become "Mixed Folder - S01E01.mkv"
-```
+The script uses your folder name as the series name. Organize each show into its own folder before running.
 
 ---
 
-## Usage Examples
+## Command-Line Flags
 
-### Basic Usage
+| Flag | Purpose |
+|------|---------|
+| `--dry-run` | Preview changes without making them (do this first!) |
+| `--series "Name"` | Override auto-detected series name |
+| `--format FORMAT` | Choose output filename format (see formats below) |
+| `--anime` | Enable anime/fansub mode (prioritizes `- 01 [Quality]` patterns) |
+| `--deep-clean` | Clean internal MKV/MP4 metadata and rename companion files |
+| `--verbose` | Show detailed debugging information |
+| `--force` | Overwrite existing files if destination already exists |
+| `--help` | Show help message |
+
+### Combining Flags
 ```bash
-# Process a single show folder (recommended)
-./rename.sh --dry-run "/path/to/TV Shows/Breaking Bad (2008)"
-
-# Process current directory (if you're in a show folder)
-./rename.sh --dry-run .
-
-# Process all shows with proper folder structure
-for show in "/path/to/TV Shows"/*; do
-    ./rename.sh --dry-run "$show"
-done
-```
-
-### Anime/Fansub Usage
-```bash
-# Process anime with anime mode (prioritizes anime patterns)
-./rename.sh --anime --dry-run "/path/to/Anime/Cyberpunk Edgerunners (2022)"
-
-# Anime with custom format
-./rename.sh --anime --format "Show - SxxExx" --dry-run "/path/to/anime"
-
-# Anime with series name override
-./rename.sh --anime --series "Attack on Titan" --dry-run "/path/to/aot-folder"
-```
-
-### With Series Name Override
-```bash
-# Manually specify series name
-./rename.sh --series "Breaking Bad" --dry-run "/path/to/breaking-bad"
-
-# For shows with complex names
-./rename.sh --series "My Little Pony Friendship Is Magic" --dry-run "/path/to/mlp"
-```
-
-### Different Output Formats
-```bash
-# Show with year (recommended for TV shows)
-./rename.sh --format "Show (Year) - SxxExx" --dry-run .
-
-# Show with year and episode titles
-./rename.sh --format "Show (Year) - SxxExx - Title" --dry-run .
-
-# Show without year (good for anime)
-./rename.sh --format "Show - SxxExx" --dry-run .
-
-# Just episode codes
-./rename.sh --format "SxxExx" --dry-run .
-
-# Include episode titles (when available)
-./rename.sh --format "Show - SxxExx - Title" --dry-run .
-```
-
-### Advanced Options
-```bash
-# Deep metadata cleanup (cleans internal MKV metadata)
-./rename.sh --deep-clean --dry-run .
-
-# Verbose output for debugging
-./rename.sh --verbose --dry-run .
-
-# Force overwrite existing files (use with caution)
-./rename.sh --force .
-
-# Combine options
 ./rename.sh --anime --deep-clean --format "Show - SxxExx" --verbose --dry-run "/path/to/anime"
 ```
 
 ---
 
-## Command Line Options
-
-| Option            | Description                                 |
-| ----------------- | ------------------------------------------- |
-| `--dry-run`       | Preview changes without making them         |
-| `--verbose`       | Show detailed processing information        |
-| `--force`         | Overwrite existing files (use with caution) |
-| `--deep-clean`    | Clean internal MKV/MP4 metadata and rename companion files |
-| `--anime`         | Enable anime/fansub mode (prioritizes anime patterns) |
-| `--series "Name"` | Manually specify series name                |
-| `--format FORMAT` | Choose output format (see formats below)   |
-| `--help`, `-h`    | Show help message                           |
-
----
-
 ## Output Formats
 
-### `Show (Year) - SxxExx - Title` (Recommended for TV shows with episode titles)
-```
-Breaking Bad (2008) - S01E01 - Pilot.mkv
-Breaking Bad (2008) - S01E02 - Cat's in the Bag.mkv
-```
+Choose how your final filenames look:
 
-### `Show (Year) - SxxExx` (Clean format with year)
-```
-3 Body Problem (2024) - S01E01.mkv
-Breaking Bad (2008) - S01E02.mkv
-```
+| Format | Example |
+|--------|---------|
+| `Show (Year) - SxxExx` | `Breaking Bad (2008) - S01E01.mkv` |
+| `Show (Year) - SxxExx - Title` | `Breaking Bad (2008) - S01E01 - Pilot.mkv` |
+| `Show - SxxExx` | `Cyberpunk Edgerunners - S01E01.mkv` |
+| `Show - SxxExx - Title` | `Breaking Bad - S01E01 - Pilot.mkv` |
+| `SxxExx - Title` | `S01E01 - Pilot.mkv` |
+| `SxxExx` | `S01E01.mkv` |
 
-### `Show - SxxExx - Title` (Good for shows with episode titles)
-```
-Breaking Bad - S01E01 - Pilot.mkv
-Breaking Bad - S01E02 - Cat's in the Bag.mkv
-```
-
-### `Show - SxxExx` (Recommended for anime)
-```
-3 Body Problem - S01E01.mkv
-Breaking Bad - S01E02.mkv
-Cyberpunk Edgerunners - S01E01.mkv
-```
-
-### `SxxExx - Title` (Episode-focused with titles)
-```
-S01E01 - Pilot.mkv
-S01E02 - Cat's in the Bag.mkv
-```
-
-### `SxxExx` (Minimal format)
-```
-S01E01.mkv
-S01E02.mkv
-```
-
----
-
-## What It Does
-
-### Before (Standard TV - properly organized folder)
-```
-Breaking Bad (2008)/
-├── Season 1/
-│   ├── Breaking.Bad.S01E01.Pilot.720p.WEB-DL.x264-GROUP.mkv
-│   └── Breaking.Bad.S01E02.Cat's.in.the.Bag.720p.WEB-DL.x264-GROUP.mkv
-└── Season 2/
-    └── Breaking.Bad.S02E01.Seven.Thirty-Seven.720p.WEB-DL.x264-GROUP.mkv
-```
-
-### After (using `--format "Show (Year) - SxxExx"`)
-```
-Breaking Bad (2008)/
-├── Season 1/
-│   ├── Breaking Bad (2008) - S01E01.mkv
-│   └── Breaking Bad (2008) - S01E02.mkv
-└── Season 2/
-    └── Breaking Bad (2008) - S02E01.mkv
-```
-
-### Before (Anime/Fansub)
-```
-Cyberpunk Edgerunners (2022)/
-├── [Erai-raws] Cyberpunk - Edgerunners - 01 [1080p][Multiple Subtitle][ABC123].mkv
-├── [Erai-raws] Cyberpunk - Edgerunners - 02 [1080p][Multiple Subtitle][DEF456].mkv
-└── [Erai-raws] Cyberpunk - Edgerunners - 03 [1080p][Multiple Subtitle][GHI789].mkv
-```
-
-### After (using `--anime --format "Show - SxxExx"`)
-```
-Cyberpunk Edgerunners (2022)/
-├── Cyberpunk Edgerunners - S01E01.mkv
-├── Cyberpunk Edgerunners - S01E02.mkv
-└── Cyberpunk Edgerunners - S01E03.mkv
-```
-
-### With Episode Titles (using `--format "Show (Year) - SxxExx - Title"`)
-```
-Breaking Bad (2008)/
-├── Season 1/
-│   ├── Breaking Bad (2008) - S01E01 - Pilot.mkv
-│   └── Breaking Bad (2008) - S01E02 - Cat's in the Bag.mkv
-└── Season 2/
-    └── Breaking Bad (2008) - S02E01 - Seven Thirty-Seven.mkv
-```
+**Recommended**: Use `Show (Year) - SxxExx` for TV shows, `Show - SxxExx` for anime.
 
 ---
 
 ## Deep Clean Feature (`--deep-clean`)
 
-The `--deep-clean` option provides comprehensive metadata cleanup for video files:
+This option cleans internal metadata from video files and renames companion files (subtitles, artwork, NFO).
 
-### Supported Formats:
-- **MKV files**: Always cleaned (container titles, track names, metadata)
-- **MP4/M4V files**: Only cleaned if they contain problematic metadata
-- **Other formats**: Companion file renaming only
+### What It Does
+- **MKV files**: Clears container titles and removes technical metadata tags from video/audio/subtitle tracks. The streams themselves are untouched—only their internal title labels are removed.
+- **MP4 files**: Sets clean container title (only if file contains problematic metadata)
+- **Companion files**: Renames external .srt, .nfo, .jpg files to match their video, preserving language codes (e.g., `show.en.srt` stays `show.en.srt`)
 
-### What it cleans:
-- **Container titles**: Sets to match your clean filename
-- **Track names**: Removes technical metadata from video/audio/subtitle tracks
-- **Companion files**: Automatically renames .srt, .nfo, .jpg files to match
-
-### MP4 Intelligence:
-The script automatically detects if MP4 files need cleaning by checking for:
-- Technical indicators (720p, x264, webrip, etc.)
-- Release group artifacts
-- Files with clean/empty titles are skipped automatically
-
-### Before deep clean (internal MKV metadata):
-```
-Container title: "GalaxyRG265 - Perfect.Blue.1997.JAPANESE.REMASTERED.1080p.BluRay.DDP5.1.x265.10bit-GalaxyRG265"
-Video track: "GalaxyRG265 - Perfect.Blue.1997.JAPANESE.REMASTERED.1080p.BluRay.DDP5.1.x265.10bit-GalaxyRG265"
-Audio track: "Stereo"
-```
-
-### After deep clean:
-```
-Container title: "Breaking Bad (2008) - S01E01 - Pilot"
-Video track: (no title)
-Audio track: (no title)
-```
-
----
-
-## Auto-Detection Features
-
-The script automatically:
-
-- **Detects series name** from folder structure (e.g., "3 Body Problem (2024)" → "3 Body Problem")
-- **Preserves years** when using appropriate formats
-- **Recognizes episode patterns**: `S01E01`, `S01 E01`, `S1E1`, `1x01`, `01x01`, `- 01 [Quality]`
-- **Handles anime/fansub formats**: Detects `[Group] Show - Episode [Metadata]` patterns
-- **Intelligently extracts episode titles** using boundary detection to separate titles from technical metadata
-- **Preserves meaningful parenthetical content** like "(Part 1)", "(Extended Cut)", "(Director's Cut)" while removing technical metadata
-- **Cleans filenames** by removing:
-  - Quality indicators (720p, 1080p, 4K, etc.)
-  - Codec info (x264, x265, HEVC, H264)
-  - Source tags (WEB, WEB-DL, BluRay, BDRip, HDTV)
-  - Audio info (AAC, AC3, DTS)
-  - Platform tags (AMZN, NFLX, HULU, etc.)
-  - Release group names and fansub group tags (both uppercase and lowercase)
-  - Hash codes in anime releases (like `[ABC123]`)
-  - Technical abbreviations and tags
+### About Internal Track Titles
+If your MKV has 5 subtitle streams with internal titles (common in multi-language releases), `--deep-clean` will clear those title labels. The subtitle streams themselves remain intact—this is normal and expected for multi-language files. External subtitle files (.srt, .ass) are handled separately and keep their language codes intact.
 
 ---
 
 ## Anime Mode (`--anime`)
 
-When you use the `--anime` flag, the script:
+Use this for fansub releases and anime with non-standard naming. The flag:
 
 - **Prioritizes anime patterns** like `- 01 [Quality]` over standard TV patterns
-- **Defaults season to 01** for single-season anime shows
-- **Changes default format** to `"Show - SxxExx"` (no episode titles, cleaner for anime)
+- **Defaults season to 01** for single-season shows
+- **Changes default format** to `Show - SxxExx` (cleaner for anime)
 - **Handles fansub groups** like `[Erai-raws]`, `[SubsPlease]`, `[HorribleSubs]`
-- **Removes hash codes** and complex metadata brackets
-- **Works with various anime naming conventions**
+- **Removes hash codes** and complex metadata
 
-### When to Use Anime Mode
+### Example
+```bash
+# Before:
+[Erai-raws] Cyberpunk - Edgerunners - 01 [1080p][Multiple Subtitle][ABC123].mkv
 
-Use `--anime` when processing:
-- Fansub releases with `[Group]` tags
-- Files with `- 01 [Quality]` episode numbering
-- Anime that doesn't follow standard `S01E01` patterns
-- Shows where you want cleaner, episode-title-free naming
+# After (with --anime):
+Cyberpunk Edgerunners - S01E01.mkv
+```
 
 ---
 
-## Title Extraction Intelligence
+## Concrete Examples
 
-The script uses advanced parsing to cleanly extract episode titles:
+### Standard TV Show
+```bash
+./rename.sh --dry-run "/path/to/TV Shows/Breaking Bad (2008)"
+```
+Converts all files to: `Breaking Bad (2008) - S01E01.mkv` format
 
-- **Series Name Validation**: Prevents series name variants from being used as episode titles
-- **Smart Deduplication**: Avoids duplicate titles within the same season
-- **Boundary Detection**: Identifies where technical metadata begins (e.g., at quality indicators like "720p")
-- **MediaInfo Fallback**: Attempts to extract real episode titles from container metadata when filename parsing fails
-- **Intelligent Rejection**: Drops titles that match series names or contain only technical metadata
-- **Enhanced Cleaning**: Removes series names, years, and technical tags while preserving actual episode titles
-- **Edge Case Handling**: Properly handles parentheses, brackets, and complex filename structures
+### TV Show with Episode Titles and Metadata Cleanup
+```bash
+./rename.sh --deep-clean --format "Show (Year) - SxxExx - Title" --dry-run "/path/to/show"
+```
+
+### Anime/Fansub
+```bash
+./rename.sh --anime --deep-clean --dry-run "/path/to/Cyberpunk Edgerunners (2022)"
+```
+Converts anime files to: `Cyberpunk Edgerunners - S01E01.mkv`
+
+### Override Series Name
+```bash
+./rename.sh --series "My Little Pony Friendship Is Magic" --dry-run "/path/to/mlp"
+```
+
+### Multiple Shows at Once
+```bash
+for show in "/path/to/TV Shows"/*; do
+    ./rename.sh --dry-run "$show"
+done
+```
 
 ---
 
 ## Safety Features
 
-- **Idempotent**: Safe to run multiple times
-- **Validation**: Checks file existence and prevents overwrites
-- **Dry-run**: Preview all changes before applying
-- **Backup-friendly**: Original files only moved, not copied
-- **Error handling**: Graceful failure with detailed error messages
+- **Idempotent**: Safe to run multiple times. Re-running on already-renamed files results in no changes.
+- **Validation**: Checks file existence and prevents accidental overwrites
+- **Dry-run**: Preview all changes before applying them
+- **File operations**: Uses `mv` to move files on the same disk (no duplicate copies created)
+- **Collision handling**: If target file exists, the script skips it unless `--force` is used
 - **Permission handling**: Automatically fixes read-only files when possible
-- **Subtitle preservation**: Maintains language codes in subtitle files
-- **No double-processing**: Prevents companion files from being renamed twice
+- **No double-processing**: Companion files renamed once, not twice
+- **Graceful errors**: Detailed messages if something goes wrong
+
+---
+
+## Supported File Types
+
+| Type | Extensions |
+|------|-----------|
+| **Video** | mkv, mp4, avi, m4v, mov, wmv, flv, webm, ts, m2ts |
+| **Subtitles** | srt, sub, ass, ssa, vtt |
 
 ---
 
 ## Troubleshooting
 
 ### No files found
-- Check file extensions are supported (mkv, mp4, avi, etc.)
+- Check extensions are supported (mkv, mp4, avi, etc.)
 - Verify the path is correct
-- Use `--verbose` to see what the script is detecting
+- Use `--verbose` to see detection details
 
 ### Episode patterns not detected
-- **For spaced formats**: The script now supports `S01 E01` format automatically
-- **For anime**: Try `--anime` flag for fansub releases
-- Check that files follow supported patterns (`S01E01`, `S01 E01`, `- 01 [Quality]`)
-- Use `--verbose` to see which patterns are being tested
-- For unusual formats, consider `--series` override
+- For spaced formats like `S01 E01`: These work automatically
+- For anime: Try the `--anime` flag
+- For unusual formats: Use `--series "Name"` to override detection
 
 ### Series name not detected correctly
-- **Ensure proper folder structure**: Each show should have its own folder
-- Use `--series "Exact Series Name"` to override auto-detection
-- Check that the folder name contains the series name (e.g., "Breaking Bad (2008)")
-- Use `--verbose` to see detection process
-- Avoid mixing multiple shows in one folder
+- **Ensure proper folder structure**: Each show in its own folder
+- Use `--series "Exact Name"` to override
+- Check folder name contains the series name (e.g., "Breaking Bad (2008)")
 
 ### Episode titles not clean
-- The script uses improved boundary detection for cleaner titles
-- Use `--format "Show - SxxExx"` to avoid including titles if they're still problematic
-- Consider manually specifying `--series` for better cleaning
-- For anime, try `--anime` flag which defaults to no episode titles
+- Try `--format "Show - SxxExx"` to skip titles altogether
+- Use `--series "Name"` for better cleaning
+- For anime, use `--anime` which defaults to no titles
 
 ### Permission errors
-- The script automatically attempts to fix read-only files
+- The script automatically fixes read-only files
 - Ensure you have write permissions to the directory
 - On WSL, check Windows file permissions
-- Try running with appropriate user privileges
 
 ### Metadata cleanup not working
-- Ensure MKVToolNix is installed for `--deep-clean` functionality
-- Check that files are actually MKV format (metadata cleanup only works on MKV/MP4)
-- Use `--verbose` to see detailed processing information
-- On Windows/WSL: install MKVToolNix **inside WSL** or add the Windows install path to WSL's `PATH`
+- Install MKVToolNix inside WSL (not just on Windows)
+- Check files are actually MKV format
+- Use `--verbose` to see processing details
 
-### Subtitles being processed twice
-- This has been fixed - companion subtitles are no longer double-processed during `--deep-clean`
-
----
-
-## Examples by Show Type
-
-### Standard TV Show
-```bash
-./rename.sh --format "Show (Year) - SxxExx" --dry-run "/path/to/office"
-```
-
-### Standard TV Show with Episode Titles and Deep Clean
-```bash
-./rename.sh --deep-clean --format "Show (Year) - SxxExx - Title" --dry-run "/path/to/office"
-```
-
-### Anime (with anime mode and deep clean)
-```bash
-./rename.sh --anime --deep-clean --dry-run "/path/to/anime/show"
-./rename.sh --anime --deep-clean --format "Show - SxxExx" --series "Attack on Titan" --dry-run "/path/to/aot"
-```
-
-### Shows with episode titles
-```bash
-./rename.sh --format "Show - SxxExx - Title" --dry-run "/path/to/show-with-good-titles"
-```
-
-### Clean, minimal naming with metadata cleanup
-```bash
-./rename.sh --deep-clean --format "SxxExx" --dry-run "/path/to/shows"
-```
+### Known Limitations
+- Multi-episode files like `S01E01-E02` are treated as the first episode (`S01E01`)
+- Specials may map as Season 00 depending on folder layout—ensure Specials folders are recognized or use `--series` override
 
 ---
 
-## Tips
+## Essential Tips
 
-1. **Always use `--dry-run` first** to preview changes
-2. **Organize shows properly**: Each show should have its own folder before running the script
-3. **Use `--anime` for fansub releases** and anime with non-standard naming
-4. **Use `--deep-clean` for MKV/MP4 files** to clean internal metadata and companion files
-5. **Use `--verbose`** when troubleshooting or understanding the parsing process
-6. **Start with `"Show (Year) - SxxExx"` format** for TV shows - it's very compatible
-7. **Use `"Show - SxxExx"` format for anime** - cleaner and more appropriate
-8. **Try `"Show (Year) - SxxExx - Title"` for shows with good episode titles**
-9. **Specify `--series`** if auto-detection isn't working well
-10. **Process shows individually** rather than running on a mixed folder
-11. **Make backups** of important collections before running
-12. **Test on a small subset** before processing large collections
-13. **The script preserves meaningful parenthetical content** like "(Part 1)" while removing technical metadata
-14. **Permission issues are handled automatically** when possible
-15. **Spaced episode formats work automatically** - no special flags needed for `S01 E01` vs `S01E01`
+1. **Always use `--dry-run` first** — it's your safety net
+2. **Test on a small batch** before processing large collections
+3. **Organize shows in separate folders** — one show per folder, one script run per show
+4. **Make backups** of important collections
+5. **Use `--verbose` when debugging** — it shows exactly what the script is detecting
 
 ---
 
 ## Requirements
 
-- Bash 4.0+ (most modern systems)
+- Bash 4.0+ (most modern systems have this)
 - Standard Unix tools (`find`, `sed`, etc.)
 - Write permissions to target directories
 
 ### Optional Dependencies (for `--deep-clean`)
-- **MKVToolNix** (`mkvpropedit`, `mkvmerge`) - Required for MKV metadata cleanup
-- **FFmpeg** - Required for MP4 metadata cleanup
-- **MediaInfo** - Required for MP4 metadata detection and episode title extraction
-  - Ubuntu/Debian: `sudo apt install mkvtoolnix ffmpeg mediainfo`
-  - macOS: `brew install mkvtoolnix ffmpeg mediainfo`
-  - **Note**: Script works without these tools but skips metadata cleanup
+- **MKVToolNix** - Ubuntu/Debian: `sudo apt install mkvtoolnix`; macOS: `brew install mkvtoolnix`
+- **FFmpeg** - Ubuntu/Debian: `sudo apt install ffmpeg`; macOS: `brew install ffmpeg`
+- **MediaInfo** - Ubuntu/Debian: `sudo apt install mediainfo`; macOS: `brew install mediainfo`
+
+The script works without these tools but will skip metadata cleanup.
 
 ---
 
@@ -547,6 +306,6 @@ Thanks to the following people who have contributed to this project:
 
 ---
 
-## License
+## License 
 
-This script is provided as-is for personal use. Feel free to modify and distribute.
+MIT. See LICENSE for details. Provided **as‑is**, without warranty.

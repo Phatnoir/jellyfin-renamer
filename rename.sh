@@ -23,9 +23,6 @@ BASE_PATH="."
 OUTPUT_FORMAT="Show - SxxExx - Title"
 ANIME_MODE=false
 
-# Supported video extensions
-VIDEO_EXTENSIONS="mkv|mp4|avi|m4v|mov|wmv|flv|webm|ts|m2ts"
-
 # Color codes
 RED="\033[0;31m"
 GREEN="\033[0;32m"
@@ -72,12 +69,16 @@ strip_outer_quotes() {
 # Create a safe temporary filename that works on WSL/Windows
 safe_temp_path() {
     local original="$1"
-    local dir=$(dirname "$original")
-    local base=$(basename "$original")
+    local dir
+	dir=$(dirname "$original")
+    local base
+	base=$(basename "$original")
     
     # Create a shorter temp name to avoid path issues
-    local timestamp=$(date +%s)
-    local safe_temp="$dir/.tmp_${timestamp}_$(echo "$base" | sed 's/[^a-zA-Z0-9._-]/_/g' | cut -c1-50).tmp"
+    local timestamp
+	timestamp=$(date +%s)
+    local safe_temp
+	safe_temp="$dir/.tmp_${timestamp}_$(echo "$base" | sed 's/[^a-zA-Z0-9._-]/_/g' | cut -c1-50).tmp"
     
     echo "$safe_temp"
 }
@@ -163,14 +164,16 @@ detect_series_name() {
     # Check if we're in a Season/season folder
     if [[ "$parent_name" =~ ^[Ss]eason[[:space:]]*[0-9]+$ ]] || [[ "$parent_name" =~ ^[Ss][0-9]+$ ]]; then
         # We're in a season folder, go up one more level for the series name
-        local grandparent_path=$(dirname "$base_path")
+        local grandparent_path
+		grandparent_path=$(dirname "$base_path")
         parent_name=$(basename "$grandparent_path")
     fi
     
     # Also check for "Specials" folder
     if [[ "$parent_name" =~ ^[Ss]pecials?$ ]]; then
         # We're in a specials folder, go up one more level for the series name
-        local grandparent_path=$(dirname "$base_path")
+        local grandparent_path
+		grandparent_path=$(dirname "$base_path")
         parent_name=$(basename "$grandparent_path")
     fi
     
@@ -208,15 +211,15 @@ get_season_episode() {
     local season=""
     local episode=""
     
-    # In anime mode, try anime patterns first
+	# In anime mode, try anime patterns first
     if [[ "$ANIME_MODE" == true ]]; then
-        # Pattern: Anime/fansub style - " - 01 [" or " - 001 [" 
-        if [[ "$filename" =~ -[[:space:]]+([0-9]{1,3})[[:space:]]*\[ ]]; then
+        # Pattern: Anime/fansub style - " - 01 [", " - 01 (", or " - 01 ."
+        if [[ "$filename" =~ -[[:space:]]+([0-9]{1,3})[[:space:]]*(\[|\(|\.) ]]; then
             season="01"
             episode="${BASH_REMATCH[1]}"
-            print_verbose "Detected anime-style episode pattern: - ${episode} ["
+            print_verbose "Detected anime-style episode pattern: - ${episode}"
         # More general anime pattern - " - 01." or " - 01 "
-        elif [[ "$filename" =~ -[[:space:]]+([0-9]{1,3})[[:space:]]*[\.\[] ]]; then
+        elif [[ "$filename" =~ -[[:space:]]+([0-9]{1,3})[[:space:]]*(\[|\(|\.) ]]; then
             season="01"
             episode="${BASH_REMATCH[1]}"
             print_verbose "Detected general anime episode pattern: - ${episode}"
@@ -237,13 +240,13 @@ get_season_episode() {
         
         # If not in anime mode, try anime patterns as fallback
         elif [[ "$ANIME_MODE" == false ]]; then
-            # Pattern 3: Anime/fansub style - " - 01 [" or " - 001 [" 
-            if [[ "$filename" =~ -[[:space:]]+([0-9]{1,3})[[:space:]]*\[ ]]; then
+            # Pattern 3: Anime/fansub style - " - 01 [", " - 01 (", or " - 01 ."
+            if [[ "$filename" =~ -[[:space:]]+([0-9]{1,3})[[:space:]]*(\[|\(|\.) ]]; then
                 season="01"
                 episode="${BASH_REMATCH[1]}"
-                print_verbose "Detected anime-style episode pattern: - ${episode} ["
+                print_verbose "Detected anime-style episode pattern: - ${episode}"
             # Pattern 4: More general anime pattern - " - 01." or " - 01 "
-            elif [[ "$filename" =~ -[[:space:]]+([0-9]{1,3})[[:space:]]*[\.\[] ]]; then
+            elif [[ "$filename" =~ -[[:space:]]+([0-9]{1,3})[[:space:]]*(\[|\(|\.) ]]; then
                 season="01"
                 episode="${BASH_REMATCH[1]}"
                 print_verbose "Detected general anime episode pattern: - ${episode}"

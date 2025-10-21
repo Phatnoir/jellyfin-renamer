@@ -305,8 +305,8 @@ clean_title() {
     title=$(echo "$title" | sed -E 's/[._ -]+(AMZN|NFLX|NF|HULU|DSNP|HBO|MAX)([._ -].*)?$//I')
     title=$(echo "$title" | sed -E 's/[._ -]+(AAC|AC3|DTS|DDP([0-9](\.[0-9])?)?)([._ -].*)?$//I')
     
-    # Restore missing ws cleanup
-    title=$(echo "$title" | sed 's/[._-]*ws[._-]*/ /gI')
+    # Restore missing ws cleanup - only match uppercase WS (scene convention) with separators to avoid catching words like "Widows"
+    title=$(echo "$title" | sed 's/[._-]WS[._-]/ /g')
     
     # Remove only technical parentheses, preserve meaningful ones
 	title=$(echo "$title" | sed 's/([^)]*\(720p\|1080p\|2160p\|4K\|480p\|576p\|x264\|x265\|HEVC\|BluRay\|WEB\|HDTV\)[^)]*)//gI')
@@ -459,6 +459,22 @@ get_episode_title() {
     if [[ -n "$clean_title" && ${#clean_title} -gt 2 ]]; then
         title="$clean_title"
         print_verbose "Using boundary-detected title: '$title'"
+        
+        # IMPORTANT: Strip series name from boundary-detected title 
+        # Normalize separators (dots/underscores to spaces) so regex can match
+        if [[ -n "$series_name" ]]; then
+            local title_normalized series_no_year_2 series_no_year_esc_2
+            # Normalize dots/underscores/dashes to spaces for matching
+            title_normalized=$(echo "$title" | sed 's/[._-]/ /g; s/  */ /g')
+            print_verbose "Normalized title for series removal: '$title_normalized'"
+            
+            series_no_year_2=$(echo "$series_name" | sed -E 's/ *\([0-9]{4}\)//g')
+            series_no_year_esc_2=$(escape_sed "$series_no_year_2")
+            # Remove series name from normalized title
+            title_normalized=$(echo "$title_normalized" | sed -E "s|^${series_no_year_esc_2}[[:space:]]*||I")
+            title="$title_normalized"
+            print_verbose "After series name removal from boundary-detected title: '$title'"
+        fi
     else
         print_verbose "No technical boundary found, using full title: '$title'"
     fi

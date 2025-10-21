@@ -259,14 +259,12 @@ get_season_episode() {
 		[[ ${#season} -eq 1 ]] && season="0$season"
 		[[ ${#episode} -eq 1 ]] && episode="0$episode"
 		# Handle 3-digit episodes like 001 -> 001 (keep as-is)
-		[[ ${#episode} -eq 3 ]] && episode="$episode"
 		echo "S${season}E${episode}"
 	elif [[ -n "$episode" ]]; then
 		# For episodes without explicit season, default to Season 01
 		# (Specials handling will be done at the caller level)
 		season="01"
 		[[ ${#episode} -eq 1 ]] && episode="0$episode"
-		[[ ${#episode} -eq 3 ]] && episode="$episode"
 		echo "S${season}E${episode}"
 	else
 		echo ""
@@ -304,7 +302,7 @@ clean_title() {
     title=$(echo "$title" | sed -E 's/[._ -]+(720p|1080p|2160p|4K|480p|576p)([._ -].*)?$//I')
     title=$(echo "$title" | sed -E 's/[._ -]+(x264|x265|HEVC|H\.?264|H\.?265)([._ -].*)?$//I')
     title=$(echo "$title" | sed -E 's/[._ -]+(WEB(-DL)?|BluRay|BDRip|DVDRip|HDTV|PDTV)([._ -].*)?$//I')
-    title=$(echo "$title" | sed -E 's/[._ -]+(AMZN|NFLX|HULU|DSNP|HBO|MAX)([._ -].*)?$//I')
+    title=$(echo "$title" | sed -E 's/[._ -]+(AMZN|NFLX|NF|HULU|DSNP|HBO|MAX)([._ -].*)?$//I')
     title=$(echo "$title" | sed -E 's/[._ -]+(AAC|AC3|DTS|DDP([0-9](\.[0-9])?)?)([._ -].*)?$//I')
     
     # Restore missing ws cleanup
@@ -342,7 +340,6 @@ safe_episode_title() {
     local series_name="$2"
     local season="$3"
     local episode="$4"
-    local file_path="$5"
     
     local title="$candidate_title"
     
@@ -371,24 +368,6 @@ safe_episode_title() {
         title=""
     fi
     
-    # If still blank and we have mediainfo, try to extract real episode title from container
-    if [[ -z "$title" && -n "$file_path" ]] && command -v mediainfo >/dev/null 2>&1; then
-        local media_title
-        media_title=$(mediainfo --Output='General;%Title%' "$file_path" 2>/dev/null | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')
-        if [[ -n "$media_title" ]]; then
-            local norm_media_title
-            norm_media_title=$(normalize_text "$media_title")
-            # Apply same checks to media title
-            if [[ -n "$norm_media_title" && "$norm_media_title" != "$norm_series" && \
-                  "$norm_media_title" != "$norm_series_no_year" && \
-                  "$norm_media_title" != *"$norm_series_no_year"* && \
-                  "$norm_series_no_year" != *"$norm_media_title"* ]]; then
-                title="$media_title"
-                print_verbose "Retrieved title from mediainfo: '$title'"
-            fi
-        fi
-    fi
-    
     # Deduplicate: if we've seen this normalized title before, drop it
     if [[ -n "$title" ]]; then
         local dedup_key="${season}_${norm_title}"
@@ -410,7 +389,7 @@ get_episode_title() {
     local filename="$1"
     local season_episode="$2"
     local series_name="$3"
-    local file_path="$4"  # NEW: full path for mediainfo
+        # file_path parameter removed
     local title
     
     # Extract season and episode numbers for validation
@@ -449,8 +428,13 @@ get_episode_title() {
     # IMPROVED: Better boundary detection that handles parentheses
     local clean_title=""
     
+	# NEW: Catch case where title is ONLY metadata/quality/codec indicators with nothing substantial before
+    if [[ "$title" =~ ^(720p|1080p|2160p|4K|480p|576p|WEB|BluRay|x264|x265|HEVC|H264|H265) ]]; then
+        clean_title=""
+        print_verbose "Title is only technical metadata, skipping mediainfo lookup"
+    # Existing boundary detection patterns follow:
     # Look for quality indicators with dot separator (original working pattern)
-    if [[ "$title" =~ ^(.+)\.(720p|1080p|2160p|4K|480p|576p) ]]; then
+    elif [[ "$title" =~ ^(.+)\.(720p|1080p|2160p|4K|480p|576p) ]]; then
         clean_title="${BASH_REMATCH[1]}"
         print_verbose "Found quality boundary at '${BASH_REMATCH[2]}', title: '$clean_title'"
     # Look for quality indicators with space and opening parenthesis
@@ -466,7 +450,7 @@ get_episode_title() {
         clean_title="${BASH_REMATCH[1]}"
         print_verbose "Found technical boundary at '${BASH_REMATCH[2]}', title: '$clean_title'"
     # Look for platform indicators
-    elif [[ "$title" =~ ^(.+)\.(AMZN|NFLX|HULU) ]]; then
+    elif [[ "$title" =~ ^(.+)\.(AMZN|NFLX|NF|HULU) ]]; then
         clean_title="${BASH_REMATCH[1]}"
         print_verbose "Found platform boundary at '${BASH_REMATCH[2]}', title: '$clean_title'"
     fi
@@ -480,7 +464,7 @@ get_episode_title() {
     fi
     
     # Only strip a trailing (...) if it looks technical
-	if [[ "$title" =~ ^(.+)[[:space:]]+\((WEB|BluRay|BDRip|HDTV|PDTV|DVDRip|AMZN|NFLX|HULU|DSNP|MAX|x264|x265|HEVC|AAC|AC3|DDP|DTS|PROPER|REPACK|INTERNAL) ]]; then
+	if [[ "$title" =~ ^(.+)[[:space:]]+\((WEB|BluRay|BDRip|HDTV|PDTV|DVDRip|AMZN|NFLX|NF|HULU|DSNP|MAX|x264|x265|HEVC|AAC|AC3|DDP|DTS|PROPER|REPACK|INTERNAL) ]]; then
 		title="${BASH_REMATCH[1]}"
 		print_verbose "Removed technical parenthetical block"
 	fi
@@ -527,7 +511,7 @@ get_episode_title() {
     title=$(echo "$title" | sed -E 's/[[:space:]]*\([^)]*$//')
     
     # NEW: Validate the title using our safe_episode_title function
-    title=$(safe_episode_title "$title" "$series_name" "$season" "$episode" "$file_path")
+    title=$(safe_episode_title "$title" "$series_name" "$season" "$episode")
     
     echo "$title"
 }
@@ -631,7 +615,7 @@ companion_rename() {
         ext="${fname##*.}"
 
         # Only touch files with whitelisted extensions
-        if [[ ! " ${exts[*]} " =~ " ${ext} " ]]; then
+        if [[ ! " ${exts[*]} " =~ ${ext} ]]; then
             continue
         fi
 
@@ -859,7 +843,8 @@ deep_clean_mp4() {
 		# Use a local temp file to avoid WSL path issues
 		local temp_file
 		temp_file=$(safe_temp_path "$file")
-		local err_log="$LOG_DIR/ffmpeg_$(basename "$file" | sed 's/[^a-zA-Z0-9._-]/_/g').log"
+		local err_log
+		err_log="$LOG_DIR/ffmpeg_$(basename "$file" | sed 's/[^a-zA-Z0-9._-]/_/g').log"
 		
 		print_verbose "Temp file: $temp_file"
 		print_verbose "Error log: $err_log"
@@ -1077,8 +1062,10 @@ rename_episode_files() {
         [[ -z "$file" ]] && continue
         [[ ! -f "$file" ]] && continue
         
-        local file_name=$(basename "$file")
-        local file_dir=$(dirname "$file")
+        local file_name
+        file_name=$(basename "$file")
+        local file_dir
+        file_dir=$(dirname "$file")
         local extension="${file_name##*.}"
         
         file_count=$((file_count + 1))
@@ -1141,8 +1128,10 @@ rename_subtitle_files() {
         [[ -z "$file" ]] && continue
         [[ ! -f "$file" ]] && continue
         
-        local file_name=$(basename "$file")
-        local file_dir=$(dirname "$file")
+        local file_name
+        file_name=$(basename "$file")
+        local file_dir
+        file_dir=$(dirname "$file")
         local extension="${file_name##*.}"
         
         sub_count=$((sub_count + 1))
@@ -1172,7 +1161,8 @@ rename_subtitle_files() {
         # Find matching video file to use its exact title
         local video_base=""
         while IFS= read -r -d '' v; do
-            local bn="$(basename "${v%.*}")"
+            local bn
+            bn="$(basename "${v%.*}")"
             if [[ "$bn" =~ (^|[^0-9])$season_episode([^0-9]|$) ]]; then
                 video_base="$bn"
                 print_verbose "Found matching video: '$bn'"

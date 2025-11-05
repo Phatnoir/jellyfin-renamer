@@ -131,7 +131,7 @@ Examples:
   $0 --anime --format "Show - SxxExx" --dry-run .
 
 Supported Episode Patterns:
-  Standard TV Shows:    S01E01, S1E1, 1x01, 01x01
+  Standard TV Shows:    S01E01, S1E1, 1x01, 01x01, E01, E001
   Anime/Fansub:         [Group] Show - 01 [Quality], Show - 01 [Metadata]
 
 The script will:
@@ -237,6 +237,12 @@ get_season_episode() {
         elif [[ "$filename" =~ ([0-9]{1,2})x([0-9]{1,2}) ]]; then
             season="${BASH_REMATCH[1]}"
             episode="${BASH_REMATCH[2]}"
+        
+        # Pattern 3: E01, E001, etc. (single season shows with just E prefix)
+        elif [[ "$filename" =~ [Ee]([0-9]{1,3}) ]]; then
+            season="01"
+            episode="${BASH_REMATCH[1]}"
+            print_verbose "Detected single-season episode pattern: E${episode}"
         
         # If not in anime mode, try anime patterns as fallback
         elif [[ "$ANIME_MODE" == false ]]; then

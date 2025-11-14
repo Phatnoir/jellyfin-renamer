@@ -416,11 +416,28 @@ get_episode_title() {
     
     # Remove series name and year combo (like "Doctor Who 2006")
     if [[ -n "$series_name" ]]; then
-        local series_no_year series_no_year_esc
+        local series_no_year series_no_year_esc series_normalized
 		series_no_year=$(echo "$series_name" | sed -E 's/ *\([0-9]{4}\)//g')
 		series_no_year_esc=$(escape_sed "$series_no_year")
+		
+		# Try exact match first
 		title=$(echo "$title" | sed "s|^${series_no_year_esc} [12][0-9][0-9][0-9] *||I" 2>/dev/null || echo "$title")
 		title=$(echo "$title" | sed "s|^${series_no_year_esc} *||I" 2>/dev/null || echo "$title")
+		
+		# If exact match failed, try normalized match (normalize BOTH the same way)
+		# First check if the title still starts with alphanumeric (likely contains series name)
+		if [[ "$title" =~ ^[A-Za-z] ]]; then
+			# Normalize series: collapse non-alphanumeric to single spaces
+			series_normalized=$(echo "$series_no_year" | sed 's/[^A-Za-z0-9 ]/ /g; s/  */ /g; s/^ *//; s/ *$//')
+			# Normalize title the same way
+			title_normalized=$(echo "$title" | sed 's/[^A-Za-z0-9 ]/ /g; s/  */ /g; s/^ *//; s/ *$//')
+			
+			if [[ "$series_normalized" != "$series_no_year" ]] && [[ "$title_normalized" =~ ^${series_normalized}[[:space:]] ]]; then
+				series_normalized_esc=$(escape_sed "$series_normalized")
+				title=$(echo "$title" | sed "s|^${series_normalized_esc} *||I" 2>/dev/null || echo "$title")
+				print_verbose "Used normalized series name removal: '$series_normalized'"
+			fi
+		fi
 		
 		# If we ended up with a leading "(YYYY) - - " or "(YYYY) - ", drop it
 		title=$(echo "$title" | sed -E 's/^\([12][0-9]{3}\)[[:space:]]*-[[:space:]]*-[[:space:]]*//')
@@ -469,15 +486,30 @@ get_episode_title() {
         # IMPORTANT: Strip series name from boundary-detected title 
         # Normalize separators (dots/underscores to spaces) so regex can match
         if [[ -n "$series_name" ]]; then
-            local title_normalized series_no_year_2 series_no_year_esc_2
+            local title_normalized series_no_year_2 series_no_year_esc_2 series_normalized_2 series_normalized_esc_2
             # Normalize dots/underscores/dashes to spaces for matching
             title_normalized=$(echo "$title" | sed 's/[._-]/ /g; s/  */ /g')
             print_verbose "Normalized title for series removal: '$title_normalized'"
             
             series_no_year_2=$(echo "$series_name" | sed -E 's/ *\([0-9]{4}\)//g')
             series_no_year_esc_2=$(escape_sed "$series_no_year_2")
-            # Remove series name from normalized title
+            # Try exact match first
             title_normalized=$(echo "$title_normalized" | sed -E "s|^${series_no_year_esc_2}[[:space:]]*||I")
+            
+            # If didn't match, normalize both the same way and try again
+            if [[ "$title_normalized" =~ ^[A-Za-z] ]]; then
+                # Normalize series: collapse all non-alphanumeric to single spaces
+                series_normalized_2=$(echo "$series_no_year_2" | sed 's/[^A-Za-z0-9 ]/ /g; s/  */ /g; s/^ *//; s/ *$//')
+                # Title is already normalized by dots/dashes to spaces above
+                title_normalized=$(echo "$title_normalized" | sed 's/^ *//; s/ *$//')
+                
+                if [[ "$series_normalized_2" != "$series_no_year_2" ]] && [[ "$title_normalized" =~ ^${series_normalized_2}[[:space:]] ]]; then
+                    series_normalized_esc_2=$(escape_sed "$series_normalized_2")
+                    title_normalized=$(echo "$title_normalized" | sed -E "s|^${series_normalized_esc_2}[[:space:]]*||I")
+                    print_verbose "Used normalized series name for boundary match: '$series_normalized_2'"
+                fi
+            fi
+            
             title="$title_normalized"
             print_verbose "After series name removal from boundary-detected title: '$title'"
         fi

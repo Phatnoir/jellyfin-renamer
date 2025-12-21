@@ -307,9 +307,11 @@ clean_title() {
     # Remove everything after common quality/codec indicators (with proper separators)
     title=$(echo "$title" | sed -E 's/[._ -]+(720p|1080p|2160p|4K|480p|576p)([._ -].*)?$//I')
     title=$(echo "$title" | sed -E 's/[._ -]+(x264|x265|HEVC|H\.?264|H\.?265)([._ -].*)?$//I')
-    title=$(echo "$title" | sed -E 's/[._ -]+(WEB(-DL)?|BluRay|BDRip|DVDRip|HDTV|PDTV)([._ -].*)?$//I')
-    title=$(echo "$title" | sed -E 's/[._ -]+(AMZN|NFLX|NF|HULU|DSNP|HBO|MAX)([._ -].*)?$//I')
+    title=$(echo "$title" | sed -E 's/[._ -]+(WEB(-DL)?|WEBRip|BluRay|BDRip|DVDRip|HDTV|PDTV)([._ -].*)?$//I')
+    title=$(echo "$title" | sed -E 's/[._ -]+(AMZN|NFLX|NF|HULU|DSNP|HBO|MAX|HMAX)([._ -].*)?$//I')
     title=$(echo "$title" | sed -E 's/[._ -]+(AAC|AC3|DTS|DDP([0-9](\.[0-9])?)?)([._ -].*)?$//I')
+    # Also catch these at the START (no leading separator) - for cases like "WEB.x264-GROUP"
+    title=$(echo "$title" | sed -E 's/^(WEB(-DL)?|WEBRip|BluRay|BDRip|DVDRip|HDTV|PDTV|720p|1080p|2160p|4K|x264|x265|HEVC)([._ -].*)?$//I')
     
     # Restore missing ws cleanup - only match uppercase WS (scene convention) with separators to avoid catching words like "Widows"
     title=$(echo "$title" | sed 's/[._-]WS[._-]/ /g')
@@ -452,9 +454,10 @@ get_episode_title() {
     local clean_title=""
     
 	# NEW: Catch case where title is ONLY metadata/quality/codec indicators with nothing substantial before
-    if [[ "$title" =~ ^(720p|1080p|2160p|4K|480p|576p|WEB|BluRay|x264|x265|HEVC|H264|H265) ]]; then
+    if [[ "$title" =~ ^[[:space:].]*$ ]] || [[ "$title" =~ ^(720p|1080p|2160p|4K|480p|576p|WEB|WEBRip|BluRay|BDRip|DVDRip|HDTV|PDTV|x264|x265|HEVC|H264|H265|AAC|AC3|DTS|PROPER|REPACK|INTERNAL)([._ -]|$) ]]; then
+        title=""
         clean_title=""
-        print_verbose "Title is only technical metadata, skipping mediainfo lookup"
+        print_verbose "Title is only technical metadata, clearing title"
     # Existing boundary detection patterns follow:
     # Look for quality indicators with dot separator (original working pattern)
     elif [[ "$title" =~ ^(.+)\.(720p|1080p|2160p|4K|480p|576p) ]]; then

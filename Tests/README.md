@@ -20,3 +20,14 @@ Currently tests:
 - Edge cases: mixed case, junk metadata
 
 **Adding new patterns:** Simply add tuples to the `test_cases` list with `(filename, expected_output, description)`.
+
+### `test_web_and_ellipsis.py`
+Verifies that the word "Web" in episode titles is preserved while technical WEB tags are stripped, and that ellipses (...) are not destroyed during title cleaning.
+
+**Run:** `python3 test_web_and_ellipsis.py`
+
+Currently tests:
+- WEB word preservation: "Tangled Web We Weaved", "Charlotte's Web", "Webmaster", etc.
+- WEB tag stripping: `.WEB.x264`, `.WEB-DL`, `.WEBRip`, `.AMZN.WEB-DL`
+- Leading ellipsis: "... And Girlfriends"
+- Trailing ellipsis: "George...", "Sin... (1)"

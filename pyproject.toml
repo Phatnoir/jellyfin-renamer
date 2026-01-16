@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jellyfin-renamer"
+version = "2.0.0"
+description = "Smart media file renamer for Jellyfin/Plex compatibility"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+keywords = ["jellyfin", "plex", "media", "rename", "tv-shows", "anime"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Video",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+]
+
+[project.scripts]
+jellyfin-renamer = "renamer.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["Tests"]
+pythonpath = ["."]
+
+[tool.hatch.build.targets.wheel]
+packages = ["renamer"]

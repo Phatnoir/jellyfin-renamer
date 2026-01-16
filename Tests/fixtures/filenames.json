@@ -1,0 +1,99 @@
+{
+  "_comment": "Test corpus for episode pattern detection. Each entry maps input filename to expected output.",
+
+  "episode_patterns": {
+    "_description": "Tests for get_season_episode()",
+
+    "standard_sxxexx": [
+      {"input": "Breaking.Bad.S01E01.Pilot.720p.WEB-DL.x264-GROUP.mkv", "season": 1, "episode": 1},
+      {"input": "Doctor.Who.2005.S05E04.Time.Of.The.Angels.HDTV.XviD-FoV.avi", "season": 5, "episode": 4},
+      {"input": "The.Office.S02E15.1080p.BluRay.mkv", "season": 2, "episode": 15},
+      {"input": "show.s1e5.title.mkv", "season": 1, "episode": 5},
+      {"input": "Show.S01.E01.Title.mkv", "season": 1, "episode": 1, "_note": "space between S and E"},
+      {"input": "Show.S01-E01.Title.mkv", "season": 1, "episode": 1, "_note": "dash between S and E"},
+      {"input": "Show.S01_E01.Title.mkv", "season": 1, "episode": 1, "_note": "underscore between S and E"},
+      {"input": "Show S10E100.mkv", "season": 10, "episode": 100, "_note": "3-digit episode"}
+    ],
+
+    "nxnn_format": [
+      {"input": "Show.1x01.Title.mkv", "season": 1, "episode": 1},
+      {"input": "Show.01x05.Title.mkv", "season": 1, "episode": 5},
+      {"input": "Show 2x15 - Episode Title.avi", "season": 2, "episode": 15},
+      {"input": "show.10x01.finale.mkv", "season": 10, "episode": 1}
+    ],
+
+    "e_pattern_single_season": [
+      {"input": "TestShow.E01.mkv", "season": 1, "episode": 1, "_note": "basic E##"},
+      {"input": "TestShow.E005.mkv", "season": 1, "episode": 5, "_note": "zero-padded"},
+      {"input": "TestShow.E010.mkv", "season": 1, "episode": 10, "_note": "double digit"},
+      {"input": "TestShow.E001.mkv", "season": 1, "episode": 1, "_note": "triple digit padding"},
+      {"input": "ShowName.e05.1080p.WEB-DL.mkv", "season": 1, "episode": 5, "_note": "lowercase with junk"}
+    ],
+
+    "anime_fansub": [
+      {"input": "[Erai-raws] Cyberpunk - Edgerunners - 01 [1080p][Multiple Subtitle].mkv", "season": 1, "episode": 1, "anime_mode": true},
+      {"input": "[SubsPlease] Spy x Family - 05 (1080p) [ABC123].mkv", "season": 1, "episode": 5, "anime_mode": true},
+      {"input": "Show Name - 12 [720p].mkv", "season": 1, "episode": 12, "anime_mode": true},
+      {"input": "[HorribleSubs] My Hero Academia - 100 [1080p].mkv", "season": 1, "episode": 100, "anime_mode": true},
+      {"input": "Anime Title - 03 (BD 1080p).mkv", "season": 1, "episode": 3, "anime_mode": true}
+    ],
+
+    "anime_fallback": [
+      {"input": "[Erai-raws] Show - 01 [1080p].mkv", "season": 1, "episode": 1, "anime_mode": false, "_note": "anime pattern detected even without --anime"}
+    ],
+
+    "no_match": [
+      {"input": "random_file.mkv", "season": null, "episode": null},
+      {"input": "movie.2020.1080p.mkv", "season": null, "episode": null}
+    ]
+  },
+
+  "title_cleaning": {
+    "_description": "Tests for title extraction and cleaning",
+
+    "quality_boundary": [
+      {"input": "Breaking.Bad.S01E01.Pilot.720p.WEB-DL.x264-GROUP.mkv", "expected_title": "Pilot"},
+      {"input": "Show.S01E01.Title.Here.1080p.BluRay.mkv", "expected_title": "Title Here"},
+      {"input": "Show.S01E01.Multi.Word.Title.2160p.HEVC.mkv", "expected_title": "Multi Word Title"}
+    ],
+
+    "technical_removal": [
+      {"input": "Show.S01E01.Title.WEB-DL.x264-KILLERS.mkv", "expected_title": "Title"},
+      {"input": "Show.S01E01.Title.HDTV.XviD-LOL.avi", "expected_title": "Title"},
+      {"input": "Show.S01E01.Title.AMZN.WEB-DL.DDP5.1.mkv", "expected_title": "Title"}
+    ],
+
+    "preserve_meaningful": [
+      {"input": "Show.S01E01.Title.(Part.1).720p.mkv", "expected_title": "Title (Part 1)", "_note": "preserve Part X"},
+      {"input": "Show.S01E01.Title.Extended.Cut.1080p.mkv", "expected_title": "Title Extended Cut", "_note": "preserve Extended Cut"},
+      {"input": "Show.S01E01.What....1080p.mkv", "expected_title": "What...", "_note": "preserve ellipsis"}
+    ],
+
+    "release_groups": [
+      {"input": "Show.S01E01.Title-DIMENSION.mkv", "expected_title": "Title"},
+      {"input": "Show.S01E01.Title-LOL.mkv", "expected_title": "Title"},
+      {"input": "Show.S01E01.Title-YTS.mkv", "expected_title": "Title"}
+    ]
+  },
+
+  "series_detection": {
+    "_description": "Tests for series name detection from folders",
+
+    "with_year": [
+      {"folder": "Breaking Bad (2008)", "expected": "Breaking Bad (2008)"},
+      {"folder": "Doctor Who (2005)", "expected": "Doctor Who (2005)"},
+      {"folder": "3 Body Problem (2024)", "expected": "3 Body Problem (2024)"}
+    ],
+
+    "season_subfolder": [
+      {"folder": "Season 1", "parent": "Breaking Bad (2008)", "expected": "Breaking Bad (2008)"},
+      {"folder": "Season 05", "parent": "Doctor Who (2005)", "expected": "Doctor Who (2005)"},
+      {"folder": "S01", "parent": "Show Name", "expected": "Show Name"}
+    ],
+
+    "specials": [
+      {"folder": "Specials", "parent": "Breaking Bad (2008)", "expected": "Breaking Bad (2008)"},
+      {"folder": "Special", "parent": "Show Name (2020)", "expected": "Show Name (2020)"}
+    ]
+  }
+}

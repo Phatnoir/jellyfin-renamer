@@ -307,7 +307,7 @@ clean_title() {
     # Remove everything after common quality/codec indicators (with proper separators)
     title=$(echo "$title" | sed -E 's/[._ -]+(720p|1080p|2160p|4K|480p|576p)([._ -].*)?$//I')
     title=$(echo "$title" | sed -E 's/[._ -]+(x264|x265|HEVC|H\.?264|H\.?265)([._ -].*)?$//I')
-    title=$(echo "$title" | sed -E 's/[._ -]+(WEB(-DL)?|WEBRip|BluRay|BDRip|DVDRip|HDTV|PDTV)([._ -].*)?$//I')
+    title=$(echo "$title" | sed -E 's/[._-]+(WEB(-DL)?|WEBRip|BluRay|BDRip|DVDRip|HDTV|PDTV)([._ -].*)?$//I')
     title=$(echo "$title" | sed -E 's/[._ -]+(AMZN|NFLX|NF|HULU|DSNP|HBO|MAX|HMAX)([._ -].*)?$//I')
     title=$(echo "$title" | sed -E 's/[._ -]+(AAC|AC3|DTS|DDP([0-9](\.[0-9])?)?)([._ -].*)?$//I')
     # Also catch these at the START (no leading separator) - for cases like "WEB.x264-GROUP"
@@ -335,9 +335,13 @@ clean_title() {
     title=$(echo "$title" | sed 's/\.avi$//I')
     
     # Normalize spacing and punctuation
+    # Protect ellipses before converting dots to spaces
+    title=$(echo "$title" | sed 's/\.\.\./THREEDOTSPLACEHOLDER/g')
     title=$(echo "$title" | sed 's/[._]/ /g')
     title=$(echo "$title" | sed 's/  */ /g')
     title=$(echo "$title" | sed 's/^ *//; s/ *$//')
+    # Restore ellipses
+    title=$(echo "$title" | sed 's/THREEDOTSPLACEHOLDER/.../g')
     
     echo "$title"
 }
@@ -399,6 +403,9 @@ get_episode_title() {
     local series_name="$3"
         # file_path parameter removed
     local title
+    
+    # Protect ellipses throughout all processing
+    filename=$(echo "$filename" | sed 's/\.\.\./THREEDOTSPLACEHOLDER/g')
     
     # Extract season and episode numbers for validation
     local season episode
@@ -467,6 +474,10 @@ get_episode_title() {
     elif [[ "$title" =~ ^(.+)[[:space:]]+\((720p|1080p|2160p|4K|480p|576p) ]]; then
         clean_title="${BASH_REMATCH[1]}"
         print_verbose "Found quality boundary at '${BASH_REMATCH[2]}', title: '$clean_title'"
+    # Look for .WEB. followed by codec/technical indicators (must come BEFORE standalone codec check)
+    elif [[ "$title" =~ ^(.+)\.WEB\.(x264|x265|HEVC|H\.?264|H\.?265|AAC|AC3|DTS|10bit|1080p|720p|2160p) ]]; then
+        clean_title="${BASH_REMATCH[1]}"
+        print_verbose "Found WEB+codec boundary, title: '$clean_title'"
     # Look for other technical indicators with dot
     elif [[ "$title" =~ ^(.+)\.(WEB-DL|BluRay|BDRip|HDTV|x264|x265|HEVC) ]]; then
         clean_title="${BASH_REMATCH[1]}"
@@ -485,6 +496,13 @@ get_episode_title() {
     if [[ -n "$clean_title" && ${#clean_title} -gt 2 ]]; then
         title="$clean_title"
         print_verbose "Using boundary-detected title: '$title'"
+        
+        # Strip technical tags (WEB-DL, WEBRip, etc.) while still dot-separated
+        # Be precise: only strip WEB when followed by -DL, Rip, or .[technical]
+        title=$(echo "$title" | sed -E 's/[._-]+(WEB-DL|WEBRip)([._-].*)?$//I')
+        title=$(echo "$title" | sed -E 's/[._-]+WEB[._-]+(x264|x265|HEVC|H\.?264|H\.?265|AAC|AC3|DTS|10bit)([._-].*)?$//I')
+        title=$(echo "$title" | sed -E 's/[._-]+(BluRay|BDRip|DVDRip|HDTV|PDTV)([._-].*)?$//I')
+        title=$(echo "$title" | sed -E 's/[._-]+(AMZN|NFLX|NF|HULU|DSNP|HBO|MAX|HMAX)([._-].*)?$//I')
         
         # IMPORTANT: Strip series name from boundary-detected title 
         # Normalize separators (dots/underscores to spaces) so regex can match
@@ -569,6 +587,9 @@ get_episode_title() {
     
     # NEW: Validate the title using our safe_episode_title function
     title=$(safe_episode_title "$title" "$series_name" "$season" "$episode")
+    
+    # Restore ellipses before returning
+    title=$(echo "$title" | sed 's/THREEDOTSPLACEHOLDER/.../g')
     
     echo "$title"
 }

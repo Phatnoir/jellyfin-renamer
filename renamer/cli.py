@@ -66,7 +66,7 @@ def print_verbose(message: str, verbose: bool) -> None:
 def create_parser() -> argparse.ArgumentParser:
     """Create the argument parser with all options."""
     parser = argparse.ArgumentParser(
-        prog="jellyfin-renamer",
+        prog="rename",
         description="Universal Media Renamer for Jellyfin/Plex",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
@@ -175,6 +175,60 @@ def main(argv: list[str] | None = None) -> int:
     if args.anime and args.format == OutputFormat.SHOW_SXXEXX_TITLE:
         output_format = OutputFormat.SHOW_SXXEXX
 
+    # Create verbose callback
+    def verbose_callback(message: str) -> None:
+        if args.verbose:
+            print(f"{Colors.CYAN}  [VERBOSE] {message}{Colors.NC}")
+
+    # Track renamed count (using list to allow mutation in callback)
+    renamed_count = [0]
+
+    # Create result callback - prints each result immediately after processing
+    def result_callback(result: RenameResult) -> None:
+        if result.success:
+            if result.skipped:
+                if "Already correct" in result.message:
+                    print_status(Colors.GREEN, f"  Already correct: {result.new_path.name}")
+                    # Deep clean even for already-correct files (like bash script does)
+                    if args.deep_clean:
+                        clean_title = result.old_path.stem
+                        # Pass verbose callback for detailed output
+                        meta_verbose = verbose_callback if args.verbose else None
+                        meta_result = clean_metadata(result.old_path, clean_title, dry_run=args.dry_run, on_verbose=meta_verbose)
+                        if meta_result.changed:
+                            if args.dry_run:
+                                print_status(Colors.YELLOW, f"    [DRY] Would clean metadata: {result.old_path.name}")
+                            else:
+                                print_status(Colors.GREEN, f"    Cleaned metadata: {result.old_path.name}")
+                        elif args.verbose and meta_result.message:
+                            verbose_callback(f"Metadata: {meta_result.message}")
+                else:
+                    print_status(Colors.YELLOW, f"  Skipped: {result.old_path.name} - {result.message}")
+            else:
+                if args.dry_run:
+                    print_status(Colors.YELLOW, f"  [DRY] {result.old_path.name} → {result.new_path.name}")
+                else:
+                    print_status(Colors.GREEN, f"  Renamed: {result.old_path.name} → {result.new_path.name}")
+                renamed_count[0] += 1
+
+                # Deep clean if requested (works in both dry-run and normal mode)
+                if args.deep_clean:
+                    # In dry-run mode, use old_path since file hasn't been renamed yet
+                    file_to_clean = result.old_path if args.dry_run else result.new_path
+                    clean_title = result.new_path.stem  # Use the new clean name for title
+                    # Pass verbose callback for detailed output
+                    meta_verbose = verbose_callback if args.verbose else None
+                    meta_result = clean_metadata(file_to_clean, clean_title, dry_run=args.dry_run, on_verbose=meta_verbose)
+                    if meta_result.changed:
+                        if args.dry_run:
+                            print_status(Colors.YELLOW, f"    [DRY] Would clean metadata: {result.new_path.name}")
+                        else:
+                            print_status(Colors.GREEN, f"    Cleaned metadata: {result.new_path.name}")
+                    elif args.verbose and meta_result.message:
+                        verbose_callback(f"Metadata: {meta_result.message}")
+        else:
+            print_status(Colors.RED, f"  Error: {result.old_path.name} - {result.message}")
+
     # Create options
     options = RenameOptions(
         dry_run=args.dry_run,
@@ -184,6 +238,8 @@ def main(argv: list[str] | None = None) -> int:
         deep_clean=args.deep_clean,
         output_format=output_format,
         series_name=args.series,
+        on_verbose=verbose_callback,
+        on_result=result_callback,
     )
 
     # Print header
@@ -208,35 +264,10 @@ def main(argv: list[str] | None = None) -> int:
 
     print()
 
-    # Process files
+    # Process files - results are printed in real-time via callback
     print_status(Colors.BLUE, "Processing episode files...")
 
     results = process_directory(base_path, options)
-
-    # Print results
-    renamed_count = 0
-    for result in results:
-        if result.success:
-            if result.skipped:
-                if "Already correct" in result.message:
-                    print_status(Colors.GREEN, f"  Already correct: {result.new_path.name}")
-                else:
-                    print_status(Colors.YELLOW, f"  Skipped: {result.old_path.name} - {result.message}")
-            else:
-                if args.dry_run:
-                    print_status(Colors.YELLOW, f"  [DRY] {result.old_path.name}{result.new_path.name}")
-                else:
-                    print_status(Colors.GREEN, f"  Renamed: {result.old_path.name}{result.new_path.name}")
-                renamed_count += 1
-
-                # Deep clean if requested
-                if args.deep_clean and not args.dry_run:
-                    clean_title = result.new_path.stem
-                    meta_result = clean_metadata(result.new_path, clean_title, dry_run=args.dry_run)
-                    if meta_result.changed:
-                        print_status(Colors.GREEN, f"    Cleaned metadata: {result.new_path.name}")
-        else:
-            print_status(Colors.RED, f"  Error: {result.old_path.name} - {result.message}")
 
     # Summary
     video_count = len(find_video_files(base_path))

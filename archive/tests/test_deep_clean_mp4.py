@@ -88,11 +88,11 @@ def main():
         
         # Step 3: Run your script with --deep-clean
         print(f"\n🔧 Running rename.sh --deep-clean...")
-        script_path = Path(__file__).parent / "rename.sh"
-        
+        script_path = Path(__file__).parent.parent / "rename.sh"
+
         if not script_path.exists():
             print(f"❌ Can't find rename.sh at {script_path}")
-            print(f"   Make sure this test script is in the same directory as rename.sh")
+            print(f"   Make sure rename.sh is in the archive/ directory")
             return 1
         
         result = subprocess.run([

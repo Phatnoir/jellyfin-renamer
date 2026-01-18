@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "jellyfin-renamer"
-version = "2.0.0"
+version = "2.0.1"
 description = "Smart media file renamer for Jellyfin/Plex compatibility"
 readme = "README.md"
 license = "MIT"
@@ -31,7 +31,7 @@ dev = [
 ]
 
 [project.scripts]
-jellyfin-renamer = "renamer.cli:main"
+rename = "renamer.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["Tests"]
@@ -39,3 +39,12 @@ pythonpath = ["."]
 
 [tool.hatch.build.targets.wheel]
 packages = ["renamer"]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/archive",
+    "/Tests",
+    "/.github",
+    "/.venv",
+    "/.gitattributes",
+]

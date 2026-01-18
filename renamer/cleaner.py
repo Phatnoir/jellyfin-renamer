@@ -73,8 +73,9 @@ TECH_PAREN_PATTERN = re.compile(
 )
 
 # Meaningful parenthetical content to PRESERVE
+# Note: Use [\s._]+ to match dots/underscores since normalization happens later
 MEANINGFUL_PAREN = re.compile(
-    r'\((Part\s+\d+|\d+|Extended\s+Cut|Director\'?s?\s+Cut|Final\s+Cut|Unrated|Theatrical)\)',
+    r'\((Part[\s._]+\d+|\d+|Extended[\s._]+Cut|Director\'?s?[\s._]+Cut|Final[\s._]+Cut|Unrated|Theatrical)\)',
     re.IGNORECASE
 )
 
@@ -218,11 +219,15 @@ def _remove_series_name(title: str, series_name: str) -> str:
         # Escape for regex
         escaped = re.escape(variant)
         # Remove from beginning with optional year and separator
-        title = re.sub(f'^{escaped}\\s*\\d{{4}}[._-]*', '', title, flags=re.IGNORECASE)
+        # Handle both bare years (Doctor.Who.2005) and parenthesized years (Pluribus (2025))
+        # Use (?!p) negative lookahead to avoid matching "1080" from "1080p" as a year
+        # Note: In character classes, put - at end to avoid range interpretation
+        title = re.sub(f'^{escaped}[.\\s_-]*\\(\\d{{4}}\\)[.\\s_-]*', '', title, flags=re.IGNORECASE)
+        title = re.sub(f'^{escaped}[.\\s_-]*\\d{{4}}(?!p)[._-]*', '', title, flags=re.IGNORECASE)
         title = re.sub(f'^{escaped}[._-]*', '', title, flags=re.IGNORECASE)
 
-    # Clean up any remaining year at start
-    title = re.sub(r'^\(\d{4}\)\s*-?\s*', '', title)
+    # Clean up any remaining year at start (with optional leading whitespace)
+    title = re.sub(r'^\s*\(\d{4}\)\s*-?\s*', '', title)
     title = re.sub(r'^-\s*-\s*', '', title)
 
     return title

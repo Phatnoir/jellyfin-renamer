@@ -1,9 +1,9 @@
 # Universal Media Renamer for Jellyfin/Plex
 
-A smart, cross-platform Bash script that renames TV show files so they work perfectly with Jellyfin, Plex, and other media servers without breaking your existing folder structure.
+A smart, cross-platform Python tool that renames TV show files so they work perfectly with Jellyfin, Plex, and other media servers without breaking your existing folder structure.
 
-> ⚠️ **Disclaimer**  
-> This script is under active development. Always use `--dry-run` first and test on backups or small batches. Pull requests, feedback, and issues are welcome!
+> ⚠️ **Disclaimer**
+> This tool is under active development. Always use `--dry-run` first and test on backups or small batches. Pull requests, feedback, and issues are welcome!
 
 ---
 
@@ -19,43 +19,45 @@ Jellyfin and Plex need them consistently named:
 - `Doctor Who (2005) - S05E04 - Time of the Angels.avi`
 - `Cyberpunk Edgerunners - S01E01.mkv`
 
-This script automates that transformation, handling codec tags, quality indicators, release groups, and anime/fansub formats automatically. It works safely with `--dry-run` so you preview changes before applying them.
+This tool automates that transformation, handling codec tags, quality indicators, release groups, and anime/fansub formats automatically. It works safely with `--dry-run` so you preview changes before applying them.
 
 ---
 
 ## Quick Start (TL;DR)
 
 ```bash
-# Make executable
-chmod +x rename.sh
+# Install from source
+pip install .
+
+# Or install in development mode
+pip install -e .
 
 # ALWAYS preview first (safe, shows what would change)
-./rename.sh --dry-run "/path/to/TV Shows/Breaking Bad (2008)"
+rename --dry-run "/path/to/TV Shows/Breaking Bad (2008)"
 
 # Once you're happy with the preview:
-./rename.sh "/path/to/TV Shows/Breaking Bad (2008)"
+rename "/path/to/TV Shows/Breaking Bad (2008)"
 
 # For anime/fansub releases:
-./rename.sh --anime --dry-run "/path/to/Anime/Cyberpunk Edgerunners (2022)"
+rename --anime --dry-run "/path/to/Anime/Cyberpunk Edgerunners (2022)"
 
 # With metadata cleanup (removes internal codec info from files):
-./rename.sh --deep-clean --dry-run "/path/to/TV Shows/Breaking Bad (2008)"
+rename --deep-clean --dry-run "/path/to/TV Shows/Breaking Bad (2008)"
 ```
 
 ### Sample dry-run output
 ```
-[DRY-RUN] Would rename:
-  Breaking.Bad.S01E01.Pilot.720p.WEB-DL.x264-GROUP.mkv
-→ Breaking Bad (2008) - S01E01 - Pilot.mkv
+[DRY] Breaking.Bad.S01E01.Pilot.720p.WEB-DL.x264-GROUP.mkv
+    → Breaking Bad (2008) - S01E01 - Pilot.mkv
 ```
 
-**Windows/WSL note**: Install MKVToolNix, FFmpeg, and MediaInfo *inside WSL*, not on Windows. The script needs them available in the WSL environment.
+**Windows/WSL note**: For `--deep-clean`, install MKVToolNix, FFmpeg, and MediaInfo *inside WSL*, not on Windows. The tool needs them available in the WSL environment.
 
 ---
 
 ## How It Works
 
-The script automatically:
+The tool automatically:
 
 - **Detects series name** from your folder structure (e.g., "Breaking Bad (2008)" → "Breaking Bad")
 - **Recognizes episode patterns**:
@@ -76,7 +78,7 @@ The script automatically:
 
 ## Folder Structure Requirements
 
-**IMPORTANT**: This script works best with properly organized TV show folders. Each show should have its own folder:
+**IMPORTANT**: This tool works best with properly organized TV show folders. Each show should have its own folder:
 
 ### Recommended Structure
 ```
@@ -104,7 +106,7 @@ Mixed Folder/
 ├── Doctor.Who.S05E04.avi            ← Will become "Mixed Folder - S05E04.avi"
 └── 3.Body.Problem.S01E01.mkv        ← Will become "Mixed Folder - S01E01.mkv"
 ```
-The script uses your folder name as the series name. Organize each show into its own folder before running.
+The tool uses your folder name as the series name. Organize each show into its own folder before running.
 
 ---
 
@@ -119,11 +121,12 @@ The script uses your folder name as the series name. Organize each show into its
 | `--deep-clean` | Clean internal MKV/MP4 metadata and rename companion files |
 | `--verbose` | Show detailed debugging information |
 | `--force` | Overwrite existing files if destination already exists |
+| `--version` | Show version number |
 | `--help` | Show help message |
 
 ### Combining Flags
 ```bash
-./rename.sh --anime --deep-clean --format "Show - SxxExx" --verbose --dry-run "/path/to/anime"
+rename --anime --deep-clean --format "Show - SxxExx" --verbose --dry-run "/path/to/anime"
 ```
 
 ---
@@ -184,30 +187,30 @@ Cyberpunk Edgerunners - S01E01.mkv
 
 ### Standard TV Show
 ```bash
-./rename.sh --dry-run "/path/to/TV Shows/Breaking Bad (2008)"
+rename --dry-run "/path/to/TV Shows/Breaking Bad (2008)"
 ```
 Converts all files to: `Breaking Bad (2008) - S01E01.mkv` format
 
 ### TV Show with Episode Titles and Metadata Cleanup
 ```bash
-./rename.sh --deep-clean --format "Show (Year) - SxxExx - Title" --dry-run "/path/to/show"
+rename --deep-clean --format "Show (Year) - SxxExx - Title" --dry-run "/path/to/show"
 ```
 
 ### Anime/Fansub
 ```bash
-./rename.sh --anime --deep-clean --dry-run "/path/to/Cyberpunk Edgerunners (2022)"
+rename --anime --deep-clean --dry-run "/path/to/Cyberpunk Edgerunners (2022)"
 ```
 Converts anime files to: `Cyberpunk Edgerunners - S01E01.mkv`
 
 ### Override Series Name
 ```bash
-./rename.sh --series "My Little Pony Friendship Is Magic" --dry-run "/path/to/mlp"
+rename --series "My Little Pony Friendship Is Magic" --dry-run "/path/to/mlp"
 ```
 
 ### Multiple Shows at Once
 ```bash
 for show in "/path/to/TV Shows"/*; do
-    ./rename.sh --dry-run "$show"
+    rename --dry-run "$show"
 done
 ```
 
@@ -218,8 +221,7 @@ done
 - **Idempotent**: Safe to run multiple times. Re-running on already-renamed files results in no changes.
 - **Validation**: Checks file existence and prevents accidental overwrites
 - **Dry-run**: Preview all changes before applying them
-- **File operations**: Uses `mv` to move files on the same disk (no duplicate copies created)
-- **Collision handling**: If target file exists, the script skips it unless `--force` is used
+- **Collision handling**: If target file exists, the tool skips it unless `--force` is used
 - **Permission handling**: Automatically fixes read-only files when possible
 - **No double-processing**: Companion files renamed once, not twice
 - **Graceful errors**: Detailed messages if something goes wrong
@@ -258,7 +260,7 @@ done
 - For anime, use `--anime` which defaults to no titles
 
 ### Permission errors
-- The script automatically fixes read-only files
+- The tool automatically fixes read-only files
 - Ensure you have write permissions to the directory
 - On WSL, check Windows file permissions
 
@@ -277,24 +279,49 @@ done
 
 1. **Always use `--dry-run` first** — it's your safety net
 2. **Test on a small batch** before processing large collections
-3. **Organize shows in separate folders** — one show per folder, one script run per show
+3. **Organize shows in separate folders** — one show per folder, one run per show
 4. **Make backups** of important collections
-5. **Use `--verbose` when debugging** — it shows exactly what the script is detecting
+5. **Use `--verbose` when debugging** — it shows exactly what the tool is detecting
 
 ---
 
-## Requirements
+## Installation
 
-- Bash 4.0+ (most modern systems have this)
-- Standard Unix tools (`find`, `sed`, etc.)
-- Write permissions to target directories
+### From Source
+```bash
+git clone https://github.com/Phatnoir/jellyfin-renamer.git
+cd jellyfin-renamer
+pip install .
+```
+
+### Development Mode
+```bash
+pip install -e ".[dev]"
+```
+
+This installs the package in editable mode (code changes take effect immediately) with dev dependencies (pytest, etc.).
+
+### Running Tests
+```bash
+pytest Tests/
+```
+
+### Releasing
+1. Bump version in `pyproject.toml`
+2. Commit: `git commit -am "Release X.Y.Z"`
+3. Tag: `git tag -a vX.Y.Z -m "Release X.Y.Z"`
+4. Push: `git push && git push --tags`
+
+### Requirements
+- Python 3.10 or higher
+- No external dependencies for basic operation
 
 ### Optional Dependencies (for `--deep-clean`)
 - **MKVToolNix** - Ubuntu/Debian: `sudo apt install mkvtoolnix`; macOS: `brew install mkvtoolnix`
 - **FFmpeg** - Ubuntu/Debian: `sudo apt install ffmpeg`; macOS: `brew install ffmpeg`
 - **MediaInfo** - Ubuntu/Debian: `sudo apt install mediainfo`; macOS: `brew install mediainfo`
 
-The script works without these tools but will skip metadata cleanup.
+The tool works without these but will skip metadata cleanup.
 
 ---
 
@@ -302,10 +329,10 @@ The script works without these tools but will skip metadata cleanup.
 
 Thanks to the following people who have contributed to this project:
 
-- **[@matthiasbeyer](https://github.com/matthiasbeyer)** - Added shellcheck CI workflow for automated code quality checks
+- **[@matthiasbeyer](https://github.com/matthiasbeyer)** - Added shellcheck CI workflow for the original Bash implementation
 
 ---
 
-## License 
+## License
 
-MIT. See LICENSE for details. Provided **as‑is**, without warranty.
+MIT. See LICENSE for details. Provided **as-is**, without warranty.

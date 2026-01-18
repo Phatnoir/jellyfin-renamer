@@ -72,6 +72,7 @@ class RenameOptions:
     # Callbacks for output (allows CLI to hook in)
     on_status: Callable[[str, str], None] | None = None  # (color, message)
     on_verbose: Callable[[str], None] | None = None
+    on_result: Callable[["RenameResult"], None] | None = None  # Called after each file
 
 
 @dataclass
@@ -84,11 +85,18 @@ class RenameSession:
     results: list[RenameResult] = field(default_factory=list)
 
     def __post_init__(self):
+        # Helper for verbose output
+        def verbose(msg: str) -> None:
+            if self.options.on_verbose:
+                self.options.on_verbose(msg)
+
         # Auto-detect series name if not provided
         if self.options.series_name:
             self.series_name = self.options.series_name
+            verbose(f"Using provided series name: '{self.series_name}'")
         else:
             self.series_name = detect_series_name(self.base_path)
+            verbose(f"Auto-detected series name: '{self.series_name}'")
 
 
 def build_filename(
@@ -405,9 +413,17 @@ def process_video_file(
     filename = file_path.name
     extension = file_path.suffix.lstrip('.')
 
+    # Helper for verbose output
+    def verbose(msg: str) -> None:
+        if session.options.on_verbose:
+            session.options.on_verbose(msg)
+
+    verbose(f"Processing file: {filename}")
+
     # Extract episode info
     episode_info = get_season_episode(filename, anime_mode=session.options.anime_mode)
     if not episode_info:
+        verbose(f"Could not extract episode info")
         return RenameResult(
             old_path=file_path,
             new_path=file_path,
@@ -415,9 +431,12 @@ def process_video_file(
             message=f"Could not extract episode info from: {filename}",
         )
 
+    verbose(f"Extracted season/episode: {episode_info.format_code()}")
+
     # Handle Specials folder - override season to 00
     if file_path.parent.name.lower() in ('specials', 'special'):
         episode_info = EpisodeInfo(season=0, episode=episode_info.episode)
+        verbose(f"Specials folder detected, using Season 00")
 
     # Get episode title
     title = get_episode_title(
@@ -426,6 +445,11 @@ def process_video_file(
         session.series_name,
         session.seen_titles,
     )
+
+    if title:
+        verbose(f"Extracted episode title: '{title}'")
+    else:
+        verbose(f"No episode title extracted")
 
     # Build new filename
     new_filename = build_filename(
@@ -438,6 +462,8 @@ def process_video_file(
     )
     new_path = file_path.parent / new_filename
 
+    verbose(f"Formatted filename: '{new_filename}'")
+
     # Perform rename
     result = safe_rename(
         file_path,
@@ -446,14 +472,25 @@ def process_video_file(
         force=session.options.force,
     )
 
-    # Rename companions if successful
-    if result.success and not result.skipped:
+    # Rename companions if successful (including for "Already correct" files)
+    # Bash script handles companions for both renamed and already-correct files
+    if result.success:
         companion_results = rename_companions(
             file_path,
             new_path,
             dry_run=session.options.dry_run,
         )
-        # Could track these separately if needed
+        # Print companion results like bash script does
+        for comp_result in companion_results:
+            if comp_result.success and not comp_result.skipped:
+                if session.options.dry_run:
+                    verbose(f"[DRY] Would rename sidecar: {comp_result.old_path.name} → {comp_result.new_path.name}")
+                else:
+                    verbose(f"Renamed sidecar: {comp_result.old_path.name} → {comp_result.new_path.name}")
+
+    # Call result callback immediately so output is interspersed with verbose
+    if session.options.on_result:
+        session.options.on_result(result)
 
     return result
 

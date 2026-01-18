@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 
 @dataclass
@@ -23,6 +24,10 @@ class MetadataResult:
     success: bool
     changed: bool = False
     message: str = ""
+
+
+# Type alias for verbose callback
+VerboseCallback = Callable[[str], None] | None
 
 
 def has_mkvpropedit() -> bool:
@@ -45,15 +50,15 @@ def has_mediainfo() -> bool:
     return shutil.which("mediainfo") is not None
 
 
-def get_mkv_track_ids(file_path: Path) -> list[int]:
+def get_mkv_track_info(file_path: Path) -> str:
     """
-    Get track IDs from an MKV file using mkvmerge.
+    Get full track info from an MKV file using mkvmerge.
 
     Returns:
-        List of track IDs, empty if mkvmerge not available or error
+        Full mkvmerge -i output, or empty string if not available
     """
     if not has_mkvmerge():
-        return []
+        return ""
 
     try:
         result = subprocess.run(
@@ -62,13 +67,27 @@ def get_mkv_track_ids(file_path: Path) -> list[int]:
             text=True,
             timeout=30,
         )
-        # Parse: "Track ID 0: video ..." -> extract 0
-        track_ids = []
-        for match in re.finditer(r"Track ID (\d+):", result.stdout):
-            track_ids.append(int(match.group(1)))
-        return track_ids
+        return result.stdout.strip()
     except (subprocess.TimeoutExpired, subprocess.SubprocessError):
+        return ""
+
+
+def get_mkv_track_ids(file_path: Path) -> list[int]:
+    """
+    Get track IDs from an MKV file using mkvmerge.
+
+    Returns:
+        List of track IDs, empty if mkvmerge not available or error
+    """
+    track_info = get_mkv_track_info(file_path)
+    if not track_info:
         return []
+
+    # Parse: "Track ID 0: video ..." -> extract 0
+    track_ids = []
+    for match in re.finditer(r"Track ID (\d+):", track_info):
+        track_ids.append(int(match.group(1)))
+    return track_ids
 
 
 def get_mp4_title(file_path: Path) -> str:
@@ -105,6 +124,7 @@ def clean_mkv_metadata(
     file_path: Path,
     clean_title: str,
     dry_run: bool = False,
+    on_verbose: VerboseCallback = None,
 ) -> MetadataResult:
     """
     Clean internal metadata from MKV file.
@@ -118,10 +138,15 @@ def clean_mkv_metadata(
         file_path: Path to MKV file
         clean_title: Title to set (usually clean filename without extension)
         dry_run: If True, don't make changes
+        on_verbose: Optional callback for verbose output
 
     Returns:
         MetadataResult with success/failure info
     """
+    def verbose(msg: str) -> None:
+        if on_verbose:
+            on_verbose(msg)
+
     if not has_mkvpropedit():
         return MetadataResult(
             file_path=file_path,
@@ -129,7 +154,33 @@ def clean_mkv_metadata(
             message="mkvpropedit not found",
         )
 
+    verbose(f"Cleaning internal metadata for: {file_path.name}")
+
+    # Get track info for verbose output
+    track_info = get_mkv_track_info(file_path)
+    if track_info:
+        verbose(f"Track info: {track_info}")
+
+    # Build command for verbose output
+    cmd = [
+        "mkvpropedit", "--quiet",
+        "--edit", "info", "--set", f"title={clean_title}",
+        "--tags", "all:",
+        str(file_path),
+    ]
+    verbose(f"Command: {' '.join(cmd)}")
+
+    # Get track IDs
+    track_ids = get_mkv_track_ids(file_path)
+    if track_ids:
+        verbose(f"Found track IDs: {', '.join(str(t) for t in track_ids)}")
+    else:
+        verbose("No track IDs found - track name clearing may not work")
+
     if dry_run:
+        # Show what would be cleared
+        for track_id in track_ids:
+            verbose(f"Would clear track @{track_id} name")
         return MetadataResult(
             file_path=file_path,
             success=True,
@@ -139,17 +190,7 @@ def clean_mkv_metadata(
 
     try:
         # Step 1: Set container title and clear tags
-        result = subprocess.run(
-            [
-                "mkvpropedit", "--quiet",
-                "--edit", "info", "--set", f"title={clean_title}",
-                "--tags", "all:",
-                str(file_path),
-            ],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
 
         if result.returncode != 0:
             return MetadataResult(
@@ -158,12 +199,13 @@ def clean_mkv_metadata(
                 message=f"mkvpropedit failed: {result.stderr}",
             )
 
+        verbose("Container metadata cleaned")
+
         # Step 2: Clear track names
-        track_ids = get_mkv_track_ids(file_path)
         for track_id in track_ids:
             # Use --delete name to remove track name
             # Exit code 2 means property doesn't exist (not an error)
-            subprocess.run(
+            track_result = subprocess.run(
                 [
                     "mkvpropedit", "--quiet",
                     str(file_path),
@@ -173,6 +215,12 @@ def clean_mkv_metadata(
                 capture_output=True,
                 timeout=30,
             )
+            if track_result.returncode == 0:
+                verbose(f"Cleared track @{track_id} name")
+            elif track_result.returncode == 2:
+                verbose(f"Track @{track_id} has no name property to clear")
+            else:
+                verbose(f"Failed to clear track @{track_id} name")
 
         return MetadataResult(
             file_path=file_path,
@@ -234,6 +282,7 @@ def clean_mp4_metadata(
     file_path: Path,
     clean_title: str,
     dry_run: bool = False,
+    on_verbose: VerboseCallback = None,
 ) -> MetadataResult:
     """
     Clean internal metadata from MP4 file.
@@ -245,10 +294,15 @@ def clean_mp4_metadata(
         file_path: Path to MP4 file
         clean_title: Title to set
         dry_run: If True, don't make changes
+        on_verbose: Optional callback for verbose output
 
     Returns:
         MetadataResult with success/failure info
     """
+    def verbose(msg: str) -> None:
+        if on_verbose:
+            on_verbose(msg)
+
     if not has_ffmpeg():
         return MetadataResult(
             file_path=file_path,
@@ -259,14 +313,37 @@ def clean_mp4_metadata(
     # Check current title
     current_title = get_mp4_title(file_path)
 
+    verbose(f"Cleaning MP4 metadata for: {file_path.name}")
+    if current_title:
+        verbose(f"Current title: '{current_title}'")
+    else:
+        verbose("No current title metadata found")
+
     # Skip if already clean
     if not title_needs_cleaning(current_title, clean_title):
+        verbose("MP4 title looks clean, skipping")
         return MetadataResult(
             file_path=file_path,
             success=True,
             changed=False,
             message="MP4 metadata already clean",
         )
+
+    verbose(f"Would change title from: '{current_title}' to: '{clean_title}'")
+
+    # Build command for verbose output
+    cmd = [
+        "ffmpeg", "-hide_banner", "-nostdin", "-v", "error",
+        "-i", str(file_path),
+        "-map", "0",
+        "-c", "copy",
+        "-map_metadata", "-1",
+        "-metadata", f"title={clean_title}",
+        "-movflags", "use_metadata_tags",
+        "-f", "mp4",
+        "-y", "<temp_file>",
+    ]
+    verbose(f"Command: {' '.join(cmd)}")
 
     if dry_run:
         return MetadataResult(
@@ -341,6 +418,7 @@ def clean_metadata(
     file_path: Path,
     clean_title: str,
     dry_run: bool = False,
+    on_verbose: VerboseCallback = None,
 ) -> MetadataResult:
     """
     Clean metadata from video file (auto-detects format).
@@ -349,6 +427,7 @@ def clean_metadata(
         file_path: Path to video file
         clean_title: Title to set
         dry_run: If True, don't make changes
+        on_verbose: Optional callback for verbose output
 
     Returns:
         MetadataResult with success/failure info
@@ -356,9 +435,9 @@ def clean_metadata(
     suffix = file_path.suffix.lower()
 
     if suffix == ".mkv":
-        return clean_mkv_metadata(file_path, clean_title, dry_run)
+        return clean_mkv_metadata(file_path, clean_title, dry_run, on_verbose)
     elif suffix in (".mp4", ".m4v"):
-        return clean_mp4_metadata(file_path, clean_title, dry_run)
+        return clean_mp4_metadata(file_path, clean_title, dry_run, on_verbose)
     else:
         return MetadataResult(
             file_path=file_path,

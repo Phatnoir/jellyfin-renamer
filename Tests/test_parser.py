@@ -24,7 +24,8 @@ class TestStandardSxxExx:
     ])
     def test_sxxexx_patterns(self, filename: str, expected_season: int, expected_episode: int):
         result = get_season_episode(filename)
-        assert result is not None
+        assert result is not None, f"Failed to parse: {filename}"
+        print(f"{filename} -> {result.format_code()}")
         assert result.season == expected_season
         assert result.episode == expected_episode
 
@@ -40,7 +41,8 @@ class TestNxNNFormat:
     ])
     def test_nxnn_patterns(self, filename: str, expected_season: int, expected_episode: int):
         result = get_season_episode(filename)
-        assert result is not None
+        assert result is not None, f"Failed to parse: {filename}"
+        print(f"{filename} -> {result.format_code()}")
         assert result.season == expected_season
         assert result.episode == expected_episode
 
@@ -57,7 +59,8 @@ class TestSingleSeasonEPattern:
     ])
     def test_e_patterns(self, filename: str, expected_episode: int):
         result = get_season_episode(filename)
-        assert result is not None
+        assert result is not None, f"Failed to parse: {filename}"
+        print(f"{filename} -> {result.format_code()}")
         assert result.season == 1  # Always defaults to season 1
         assert result.episode == expected_episode
 
@@ -74,14 +77,17 @@ class TestAnimeFansub:
     ])
     def test_anime_patterns_with_anime_mode(self, filename: str, expected_episode: int):
         result = get_season_episode(filename, anime_mode=True)
-        assert result is not None
+        assert result is not None, f"Failed to parse: {filename}"
+        print(f"{filename} -> {result.format_code()}")
         assert result.season == 1  # Anime defaults to season 1
         assert result.episode == expected_episode
 
     def test_anime_pattern_fallback_without_anime_mode(self):
         """Anime patterns should still be detected as fallback even without --anime."""
-        result = get_season_episode("[Erai-raws] Show - 01 [1080p].mkv", anime_mode=False)
-        assert result is not None
+        filename = "[Erai-raws] Show - 01 [1080p].mkv"
+        result = get_season_episode(filename, anime_mode=False)
+        assert result is not None, f"Failed to parse: {filename}"
+        print(f"{filename} -> {result.format_code()} (no --anime flag)")
         assert result.season == 1
         assert result.episode == 1
 
@@ -96,7 +102,8 @@ class TestNoMatch:
     ])
     def test_no_match(self, filename: str):
         result = get_season_episode(filename)
-        assert result is None
+        print(f"{filename} -> (no match)")
+        assert result is None, f"Should not match but got: {result}"
 
 
 class TestEpisodeInfoFormatting:
@@ -104,14 +111,17 @@ class TestEpisodeInfoFormatting:
 
     def test_format_standard(self):
         info = EpisodeInfo(season=1, episode=5)
+        print(f"Season {info.season}, Episode {info.episode} -> {info.format_code()}")
         assert info.format_code() == "S01E05"
 
     def test_format_double_digit(self):
         info = EpisodeInfo(season=10, episode=15)
+        print(f"Season {info.season}, Episode {info.episode} -> {info.format_code()}")
         assert info.format_code() == "S10E15"
 
     def test_format_triple_digit_episode(self):
         info = EpisodeInfo(season=1, episode=100)
+        print(f"Season {info.season}, Episode {info.episode} -> {info.format_code()}")
         assert info.format_code() == "S01E100"
 
 
@@ -126,4 +136,6 @@ class TestNormalizeText:
         ("Spy x Family", "spyxfamily"),
     ])
     def test_normalize(self, input_text: str, expected: str):
-        assert normalize_text(input_text) == expected
+        result = normalize_text(input_text)
+        print(f'"{input_text}" -> "{result}"')
+        assert result == expected

@@ -1,9 +1,18 @@
+# ======================
 # Python
+# ======================
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build / packaging
 build/
 develop-eggs/
 dist/
@@ -20,24 +29,34 @@ wheels/
 .installed.cfg
 *.egg
 
+# ======================
 # Testing
+# ======================
 .pytest_cache/
 .coverage
 htmlcov/
 
-# IDE
+# ======================
+# IDE / Editor
+# ======================
 .idea/
 .vscode/
 *.swp
 *.swo
 
+# ======================
 # OS
+# ======================
 .DS_Store
 Thumbs.db
 
+# ======================
 # Logs
+# ======================
 *.log
 .rename_logs/
 
-#Claude
+# ======================
+# Claude
+# ======================
 .claude/

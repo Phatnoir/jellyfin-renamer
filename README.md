@@ -306,12 +306,6 @@ This installs the package in editable mode (code changes take effect immediately
 pytest Tests/
 ```
 
-### Releasing
-1. Bump version in `pyproject.toml`
-2. Commit: `git commit -am "Release X.Y.Z"`
-3. Tag: `git tag -a vX.Y.Z -m "Release X.Y.Z"`
-4. Push: `git push && git push --tags`
-
 ### Requirements
 - Python 3.10 or higher
 - No external dependencies for basic operation

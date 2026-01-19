@@ -378,13 +378,28 @@ def get_episode_title(
     return title
 
 
+def _episode_sort_key(path: Path) -> tuple:
+    """
+    Generate a sort key for episode files.
+
+    Sorts by: (parent_path, season, episode, lowercase_name)
+    This ensures files are grouped by directory, then ordered by episode number,
+    regardless of filename case.
+    """
+    episode_info = get_season_episode(path.name)
+    if episode_info:
+        return (str(path.parent).lower(), episode_info.season, episode_info.episode, path.name.lower())
+    # Fallback for non-episode files: sort by path, then name
+    return (str(path.parent).lower(), 999, 999, path.name.lower())
+
+
 def find_video_files(base_path: Path) -> list[Path]:
     """Find all video files in directory tree."""
     files = []
     for ext in VIDEO_EXTENSIONS:
         files.extend(base_path.rglob(f"*{ext}"))
         files.extend(base_path.rglob(f"*{ext.upper()}"))
-    return sorted(set(files), key=lambda p: p.name)
+    return sorted(set(files), key=_episode_sort_key)
 
 
 def find_subtitle_files(base_path: Path) -> list[Path]:
@@ -393,7 +408,7 @@ def find_subtitle_files(base_path: Path) -> list[Path]:
     for ext in SUBTITLE_EXTENSIONS:
         files.extend(base_path.rglob(f"*{ext}"))
         files.extend(base_path.rglob(f"*{ext.upper()}"))
-    return sorted(set(files), key=lambda p: p.name)
+    return sorted(set(files), key=_episode_sort_key)
 
 
 def process_video_file(

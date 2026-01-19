@@ -28,7 +28,7 @@ QUALITY_PATTERN = re.compile(
 
 # Codec indicators
 CODEC_PATTERN = re.compile(
-    r'[.\s_-]+(x264|x265|HEVC|H\.?264|H\.?265|AV1)',
+    r'[.\s_-]+(x264|x265|HEVC|H\.?264|H\.?265|AV1|XviD|DivX)',
     re.IGNORECASE
 )
 
@@ -125,9 +125,9 @@ def find_title_boundary(text: str) -> int | None:
         # WEB+codec pattern
         (r'^(.+)\.WEB\.(x264|x265|HEVC|H\.?264|H\.?265)', 1),
         # Technical indicators with dot
-        (r'^(.+)\.(WEB-DL|BluRay|BDRip|HDTV|x264|x265|HEVC)', 1),
+        (r'^(.+)\.(WEB-DL|BluRay|BDRip|HDTV|x264|x265|HEVC|XviD|DivX)', 1),
         # Technical with space and parenthesis
-        (r'^(.+)\s+\((WEB-DL|BluRay|BDRip|HDTV|x264|x265|HEVC)', 1),
+        (r'^(.+)\s+\((WEB-DL|BluRay|BDRip|HDTV|x264|x265|HEVC|XviD|DivX)', 1),
         # Platform indicators
         (r'^(.+)\.(AMZN|NFLX|NF|HULU)', 1),
     ]
@@ -241,7 +241,7 @@ def _strip_technical_metadata(title: str) -> str:
     title = re.sub(r'[.\s_-]+(720p|1080p|2160p|4K|480p|576p)([.\s_-].*)?$', '', title, flags=re.IGNORECASE)
 
     # Codec indicators at end
-    title = re.sub(r'[.\s_-]+(x264|x265|HEVC|H\.?264|H\.?265)([.\s_-].*)?$', '', title, flags=re.IGNORECASE)
+    title = re.sub(r'[.\s_-]+(x264|x265|HEVC|H\.?264|H\.?265|XviD|DivX)([.\s_-].*)?$', '', title, flags=re.IGNORECASE)
 
     # Source indicators at end
     title = re.sub(r'[.\s_-]+(WEB-DL|WEBRip|BluRay|BDRip|DVDRip|HDTV|PDTV)([.\s_-].*)?$', '', title, flags=re.IGNORECASE)
@@ -259,7 +259,7 @@ def _strip_technical_metadata(title: str) -> str:
     title = re.sub(r'(^|[.\s_-])(DL|DDP?)([.\s_-]|$)', r'\1\3', title, flags=re.IGNORECASE)
 
     # Technical abbreviations at start (when title is ONLY metadata)
-    if re.match(r'^(720p|1080p|2160p|4K|WEB|BluRay|HDTV|x264|x265|HEVC)', title, re.IGNORECASE):
+    if re.match(r'^(720p|1080p|2160p|4K|WEB|BluRay|HDTV|x264|x265|HEVC|XviD|DivX)', title, re.IGNORECASE):
         return ""
 
     return title

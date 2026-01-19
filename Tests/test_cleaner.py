@@ -25,6 +25,11 @@ class TestTitleCleaning:
         ("Title.HDTV.XviD-LOL", "Title"),
         ("Title.AMZN.WEB-DL.DDP5.1", "Title"),
 
+        # XviD/DivX as first technical indicator (no quality prefix)
+        # Regression test: XviD must work as boundary even without 720p/HDTV before it
+        ("Title.XviD-AFG[eztv]", "Title"),
+        ("Title.DivX-GROUP", "Title"),
+
         # Release group removal
         ("Title-DIMENSION", "Title"),
         ("Title-LOL", "Title"),
@@ -60,6 +65,13 @@ class TestFullTransformation:
             "The.Office.S02E15.1080p.BluRay.mkv",
             "The Office (2005)",
             "The Office (2005) - S02E15.mkv"  # No title extracted
+        ),
+        # XviD as first technical indicator (no quality like 720p before it)
+        # Regression test for: XviD must be recognized as boundary without preceding quality
+        (
+            "Mr.Inbetween.S01E04.XviD-AFG[eztv].avi",
+            "Mr Inbetween (2018)",
+            "Mr Inbetween (2018) - S01E04.avi"  # No spurious "XviD-AFG" title
         ),
 
         # Already-renamed files with parenthesized year and quality in parens

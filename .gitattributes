@@ -1,0 +1,2 @@
+# Exclude archive directory from GitHub release downloads and git archive
+archive/ export-ignore

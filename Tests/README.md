@@ -1,33 +1,33 @@
 # Tests
 
-Automated verification scripts for rename.sh features.
+Unit tests for the `renamer` Python package using pytest.
 
-## Test Scripts
+## Running Tests
 
-### `test_deep_clean_mp4.py`
-Validates the `--deep-clean` flag's MP4 metadata cleaning functionality. Creates a test MP4 with dirty metadata, runs the deep-clean process, and verifies metadata was properly cleaned.
+```bash
+# Run all tests
+pytest Tests/
 
-**Run:** `python3 test_deep_clean_mp4.py`
+# Verbose output
+pytest Tests/ -v
 
-### `test_episode_pattern_detection.py`
-Lightweight framework for verifying episode pattern detection. Creates dummy files with various naming formats, runs rename.sh in dry-run mode, and confirms patterns are correctly identified.
+# Run specific test file
+pytest Tests/test_parser.py
 
-**Run:** `python3 test_episode_pattern_detection.py`
+# Run with coverage
+pytest Tests/ --cov=renamer
+```
 
-Currently tests:
-- Standard patterns: `S01E01`, `1x01`, `E##`
-- Anime patterns: `[Group] Show - ##`
-- Edge cases: mixed case, junk metadata
+## Test Fixtures
 
-**Adding new patterns:** Simply add tuples to the `test_cases` list with `(filename, expected_output, description)`.
+Test data lives in `fixtures/filenames.json` - a corpus of 200+ filename patterns organized by category:
 
-### `test_web_and_ellipsis.py`
-Verifies that the word "Web" in episode titles is preserved while technical WEB tags are stripped, and that ellipses (...) are not destroyed during title cleaning.
+- `episode_patterns` - S01E01, 1x01, anime formats, etc.
+- `title_cleaning` - quality tags, release groups, preserving meaningful text
+- `series_detection` - extracting series names from folder structures
 
-**Run:** `python3 test_web_and_ellipsis.py`
+The fixtures are loaded via `conftest.py` and parametrized into individual test cases.
 
-Currently tests:
-- WEB word preservation: "Tangled Web We Weaved", "Charlotte's Web", "Webmaster", etc.
-- WEB tag stripping: `.WEB.x264`, `.WEB-DL`, `.WEBRip`, `.AMZN.WEB-DL`
-- Leading ellipsis: "... And Girlfriends"
-- Trailing ellipsis: "George...", "Sin... (1)"
+## Adding Test Cases
+
+Add entries to the appropriate section in `fixtures/filenames.json`. Each test case specifies input and expected output - pytest will automatically pick them up.

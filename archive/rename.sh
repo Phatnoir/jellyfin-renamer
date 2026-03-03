@@ -306,18 +306,18 @@ clean_title() {
     # FIXED: Better technical tag removal with word boundaries and separators
     # Remove everything after common quality/codec indicators (with proper separators)
     title=$(echo "$title" | sed -E 's/[._ -]+(720p|1080p|2160p|4K|480p|576p)([._ -].*)?$//I')
-    title=$(echo "$title" | sed -E 's/[._ -]+(x264|x265|HEVC|H\.?264|H\.?265)([._ -].*)?$//I')
+    title=$(echo "$title" | sed -E 's/[._ -]+(x264|x265|HEVC|H\.?264|H\.?265|XviD|DivX)([._ -].*)?$//I')
     title=$(echo "$title" | sed -E 's/[._-]+(WEB(-DL)?|WEBRip|BluRay|BDRip|DVDRip|HDTV|PDTV)([._ -].*)?$//I')
     title=$(echo "$title" | sed -E 's/[._ -]+(AMZN|NFLX|NF|HULU|DSNP|HBO|MAX|HMAX)([._ -].*)?$//I')
     title=$(echo "$title" | sed -E 's/[._ -]+(AAC|AC3|DTS|DDP([0-9](\.[0-9])?)?)([._ -].*)?$//I')
     # Also catch these at the START (no leading separator) - for cases like "WEB.x264-GROUP"
-    title=$(echo "$title" | sed -E 's/^(WEB(-DL)?|WEBRip|BluRay|BDRip|DVDRip|HDTV|PDTV|720p|1080p|2160p|4K|x264|x265|HEVC)([._ -].*)?$//I')
+    title=$(echo "$title" | sed -E 's/^(WEB(-DL)?|WEBRip|BluRay|BDRip|DVDRip|HDTV|PDTV|720p|1080p|2160p|4K|x264|x265|HEVC|XviD|DivX)([._ -].*)?$//I')
     
     # Restore missing ws cleanup - only match uppercase WS (scene convention) with separators to avoid catching words like "Widows"
     title=$(echo "$title" | sed 's/[._-]WS[._-]/ /g')
     
     # Remove only technical parentheses, preserve meaningful ones
-	title=$(echo "$title" | sed 's/([^)]*\(720p\|1080p\|2160p\|4K\|480p\|576p\|x264\|x265\|HEVC\|BluRay\|WEB\|HDTV\)[^)]*)//gI')
+	title=$(echo "$title" | sed 's/([^)]*\(720p\|1080p\|2160p\|4K\|480p\|576p\|x264\|x265\|HEVC\|XviD\|DivX\|BluRay\|WEB\|HDTV\)[^)]*)//gI')
     title=$(echo "$title" | sed 's/\[[^]]*\]//g')
     
     # FIXED: Better release group removal (case-insensitive, handles lowercase) NEW: (only strip ALLCAPS or contains digits, 3+ chars)
@@ -461,7 +461,7 @@ get_episode_title() {
     local clean_title=""
     
 	# NEW: Catch case where title is ONLY metadata/quality/codec indicators with nothing substantial before
-    if [[ "$title" =~ ^[[:space:].]*$ ]] || [[ "$title" =~ ^(720p|1080p|2160p|4K|480p|576p|WEB|WEBRip|BluRay|BDRip|DVDRip|HDTV|PDTV|x264|x265|HEVC|H264|H265|AAC|AC3|DTS|PROPER|REPACK|INTERNAL)([._ -]|$) ]]; then
+    if [[ "$title" =~ ^[[:space:].]*$ ]] || [[ "$title" =~ ^(720p|1080p|2160p|4K|480p|576p|WEB|WEBRip|BluRay|BDRip|DVDRip|HDTV|PDTV|x264|x265|HEVC|XviD|DivX|H264|H265|AAC|AC3|DTS|PROPER|REPACK|INTERNAL)([._ -]|$) ]]; then
         title=""
         clean_title=""
         print_verbose "Title is only technical metadata, clearing title"
@@ -479,11 +479,11 @@ get_episode_title() {
         clean_title="${BASH_REMATCH[1]}"
         print_verbose "Found WEB+codec boundary, title: '$clean_title'"
     # Look for other technical indicators with dot
-    elif [[ "$title" =~ ^(.+)\.(WEB-DL|BluRay|BDRip|HDTV|x264|x265|HEVC) ]]; then
+    elif [[ "$title" =~ ^(.+)\.(WEB-DL|BluRay|BDRip|HDTV|x264|x265|HEVC|XviD|DivX) ]]; then
         clean_title="${BASH_REMATCH[1]}"
         print_verbose "Found technical boundary at '${BASH_REMATCH[2]}', title: '$clean_title'"
     # Look for other technical indicators with space and parenthesis
-    elif [[ "$title" =~ ^(.+)[[:space:]]+\((WEB-DL|BluRay|BDRip|HDTV|x264|x265|HEVC) ]]; then
+    elif [[ "$title" =~ ^(.+)[[:space:]]+\((WEB-DL|BluRay|BDRip|HDTV|x264|x265|HEVC|XviD|DivX) ]]; then
         clean_title="${BASH_REMATCH[1]}"
         print_verbose "Found technical boundary at '${BASH_REMATCH[2]}', title: '$clean_title'"
     # Look for platform indicators
@@ -539,7 +539,7 @@ get_episode_title() {
     fi
     
     # Only strip a trailing (...) if it looks technical
-	if [[ "$title" =~ ^(.+)[[:space:]]+\((WEB|BluRay|BDRip|HDTV|PDTV|DVDRip|AMZN|NFLX|NF|HULU|DSNP|MAX|x264|x265|HEVC|AAC|AC3|DDP|DTS|PROPER|REPACK|INTERNAL) ]]; then
+	if [[ "$title" =~ ^(.+)[[:space:]]+\((WEB|BluRay|BDRip|HDTV|PDTV|DVDRip|AMZN|NFLX|NF|HULU|DSNP|MAX|x264|x265|HEVC|XviD|DivX|AAC|AC3|DDP|DTS|PROPER|REPACK|INTERNAL) ]]; then
 		title="${BASH_REMATCH[1]}"
 		print_verbose "Removed technical parenthetical block"
 	fi

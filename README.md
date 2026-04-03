@@ -30,7 +30,9 @@ This tool automates that transformation, handling codec tags, quality indicators
 pip install .
 
 # Or install in development mode
-pip install -e .
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev]"
 
 # ALWAYS preview first (safe, shows what would change)
 rename --dry-run "/path/to/TV Shows/Breaking Bad (2008)"
@@ -330,3 +332,4 @@ Thanks to the following people who have contributed to this project:
 ## License
 
 MIT. See LICENSE for details. Provided **as-is**, without warranty.
+

@@ -124,6 +124,14 @@ class TestEpisodeInfoFormatting:
         print(f"Season {info.season}, Episode {info.episode} -> {info.format_code()}")
         assert info.format_code() == "S01E100"
 
+    def test_format_dual_episode(self):
+        info = EpisodeInfo(season=1, episode=1, second_episode=2)
+        assert info.format_code() == "S01E01-E02"
+
+    def test_format_dual_episode_higher_numbers(self):
+        info = EpisodeInfo(season=1, episode=25, second_episode=26)
+        assert info.format_code() == "S01E25-E26"
+
 
 class TestNormalizeText:
     """Test text normalization for comparison."""

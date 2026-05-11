@@ -20,13 +20,16 @@ class EpisodeInfo:
     """Parsed episode information."""
     season: int
     episode: int
+    second_episode: int | None = None
 
     def format_code(self) -> str:
-        """Format as S01E01 style code."""
-        # Handle 3-digit episodes (keep as-is)
-        if self.episode >= 100:
-            return f"S{self.season:02d}E{self.episode:03d}"
-        return f"S{self.season:02d}E{self.episode:02d}"
+        """Format as S01E01 or S01E01-E02 style code."""
+        def ep_str(n: int) -> str:
+            return f"E{n:03d}" if n >= 100 else f"E{n:02d}"
+
+        if self.second_episode is not None:
+            return f"S{self.season:02d}{ep_str(self.episode)}-{ep_str(self.second_episode)}"
+        return f"S{self.season:02d}{ep_str(self.episode)}"
 
 
 # =============================================================================

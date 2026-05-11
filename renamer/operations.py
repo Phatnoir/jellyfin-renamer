@@ -446,6 +446,14 @@ def process_video_file(
             message=f"Could not extract episode info from: {filename}",
         )
 
+    # Detect dual-episode via ._. separator before any cleaning
+    if '._.' in filename:
+        episode_info = EpisodeInfo(
+            season=episode_info.season,
+            episode=episode_info.episode,
+            second_episode=episode_info.episode + 1,
+        )
+
     verbose(f"Extracted season/episode: {episode_info.format_code()}")
 
     # Handle Specials folder - override season to 00

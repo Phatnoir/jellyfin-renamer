@@ -191,6 +191,7 @@ def clean_title(title: str, series_name: str = "") -> str:
     title = re.sub(r'\.(mkv|mp4|avi|m4v|mov|wmv|flv|webm|ts|m2ts)$', '', title, flags=re.IGNORECASE)
 
     # Normalize spacing and punctuation
+    title = re.sub(r'\._\.', ' & ', title)  # dot-underscore-dot = dual-segment separator
     title = re.sub(r'[._]', ' ', title)
     title = re.sub(r'\s+', ' ', title)
     title = title.strip()

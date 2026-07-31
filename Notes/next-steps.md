@@ -16,6 +16,22 @@
 - Automated Python testing infrastructure
 - Enhanced verbose logging for debugging
 
+### Leading-Number-With-Season Pattern ✅
+- Added `PATTERN_LEADING_NUMBER_WITH_SEASON` to `parser.py` for filenames like `01. HORRIBLE_HISTORIES-S1.mp4`
+- Leading number is the episode, trailing `-S#` or `_S#` tag is the season
+- Checked before SxxExx/NxNN/E## so the leading number wins; `(?![Ee]?\d)` guard prevents hijacking genuine SxxExx codes
+- Verified against real-world Horrible Histories (2009) — all 37 files across 3 seasons parsed correctly
+- Known source-file edge case: `09. Horrible Histories-S2.mp4` sits in the Season 3 folder but its filename says S2 — parser faithfully follows the filename; fix the source file before applying
+
+### Filesystem Test Coverage ✅
+- Added `Tests/test_operations.py` with 27 tests covering the parts that actually touch disk
+- `TestSafeRename`: dry-run, actual move, missing source, collision skip/force, already-correct no-op
+- `TestRenameCompanions`: srt follows video, language codes preserved, non-companion ignored, dry-run, multiple companions
+- `TestBuildFilename`: all `OutputFormat` variants, year-stripped vs. year-included, dual-episode, extension preservation
+- `TestProcessVideoFile`: new leading-number pattern end-to-end, standard SxxExx still works, unparseable → failure, Specials → S00, dry-run creates no files
+- `TestProcessDirectory`: batch processing, mixed parseable/unparseable, dry-run filesystem safety, files across season subdirs
+- Test suite now 94 tests (was 59 before this branch)
+
 ### Python Migration ✅
 - Full rewrite from ~1,300 line bash script to ~800 line Python package
 - Clean module separation: `parser`, `cleaner`, `operations`, `metadata`, `cli`
@@ -42,12 +58,8 @@
 - A post-processing check — "if N% of episodes in a batch have the same non-empty title, warn the user" — would catch any cleaning failure, not just the release group case
 - Low effort, high value as a defensive layer regardless of other improvements
 
-### Thin Filesystem Test Coverage
-- `safe_rename`, `process_video_file`, `process_directory`, `build_filename`, and `rename_companions` have no tests
-- Current suite is closer to smoke tests than a real safety net for the parts that actually touch the disk
-
 ### Minor Code Issues
-- `get_episode_title` in `operations.py` duplicates episode-stripping regex from `parser.py` — maintenance trap if new patterns are added
+- `get_episode_title` in `operations.py` duplicates episode-stripping regex from `parser.py` — maintenance trap if new patterns are added (hit this already: leading-number pattern strips nothing in title cleanup)
 - `renamed_count = [0]` closure workaround in `cli.py` should use `nonlocal`
 - `Colors.disable()` mutates class-level state — breaks if `main()` is called more than once in the same process
 - `build_filename` re-runs `detect_series_name_no_year()` on every file call; should be resolved once at session start

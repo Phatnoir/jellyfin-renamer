@@ -42,6 +42,15 @@
       {"input": "[Erai-raws] Show - 01 [1080p].mkv", "season": 1, "episode": 1, "anime_mode": false, "_note": "anime pattern detected even without --anime"}
     ],
 
+    "leading_number_with_season": [
+      {"input": "01. HORRIBLE_HISTORIES-S1.mp4", "season": 1, "episode": 1},
+      {"input": "02. HORRIBLE_HISTORIES-S1.mp4", "season": 1, "episode": 2},
+      {"input": "06. HORRIBLE_HISTORIES-S1.mp4", "season": 1, "episode": 6},
+      {"input": "09. HORRIBLE_HISTORIES_S2.mp4", "season": 2, "episode": 9},
+      {"input": "12. HORRIBLE_HISTORIES-S3.mp4", "season": 3, "episode": 12},
+      {"input": "03. Horrible Histories-S3.mp4", "season": 3, "episode": 3, "_note": "mixed case and dash"}
+    ],
+
     "no_match": [
       {"input": "random_file.mkv", "season": null, "episode": null},
       {"input": "movie.2020.1080p.mkv", "season": null, "episode": null}

@@ -60,6 +60,23 @@ PATTERN_ANIME = re.compile(
     r'-\s+(\d{1,3})\s*[\[\(.]'
 )
 
+# Leading-number-with-season pattern: "01. HORRIBLE_HISTORIES-S1.mp4"
+# Structure:
+#   ^(\d{1,3})      leading digits  -> EPISODE number
+#   \.\s*           dot separator, optional whitespace
+#   .*              any characters (the show name, etc.)
+#   [-_][Ss](\d{1,2})   a dash/underscore then S## -> SEASON number
+#   (?![Ee]?\d)     guard: the S## must NOT be part of an SxxExx code
+#                   (e.g. "S02E05"); if it is, this pattern declines so the
+#                   real SxxExx parser can handle it instead.
+# Examples:
+#   "01. HORRIBLE_HISTORIES-S1.mp4"  -> season=1, episode=1
+#   "09. HORRIBLE_HISTORIES_S2.mp4"  -> season=2, episode=9
+#   "03. Horrible Histories-S3.mp4"  -> season=3, episode=3
+PATTERN_LEADING_NUMBER_WITH_SEASON = re.compile(
+    r'^(\d{1,3})\.\s*.*[-_][Ss](\d{1,2})(?![Ee]?\d)'
+)
+
 
 def get_season_episode(filename: str, anime_mode: bool = False) -> EpisodeInfo | None:
     """
@@ -74,15 +91,17 @@ def get_season_episode(filename: str, anime_mode: bool = False) -> EpisodeInfo |
 
     Pattern priority (anime_mode=True):
         1. Anime pattern (- 01 [)
+        2. Leading-number-with-season (01. Show-S1)
+        3. Standard SxxExx
+        4. NxNN format
+        5. E## format
+
+    Pattern priority (anime_mode=False):
+        1. Leading-number-with-season (01. Show-S1)
         2. Standard SxxExx
         3. NxNN format
         4. E## format
-
-    Pattern priority (anime_mode=False):
-        1. Standard SxxExx
-        2. NxNN format
-        3. E## format
-        4. Anime pattern (fallback)
+        5. Anime pattern (fallback)
     """
     season: int | None = None
     episode: int | None = None
@@ -94,6 +113,18 @@ def get_season_episode(filename: str, anime_mode: bool = False) -> EpisodeInfo |
             season = 1  # Default season for anime
             episode = int(match.group(1))
             return EpisodeInfo(season=season, episode=episode)
+
+    # Pattern 0 (high priority): "01. Show-S1.mp4" style names.
+    # Checked BEFORE the standard SxxExx/NxNN/E## patterns because the leading
+    # number is the authoritative episode number for these files, and the season
+    # lives in a trailing "-S#"/"_S#" tag that the other patterns don't recognize.
+    # The regex's own (?![Ee]?\d) guard makes it decline anything that is really
+    # an SxxExx code, so genuine "01. Show-S02E05" names still fall through below.
+    match = PATTERN_LEADING_NUMBER_WITH_SEASON.match(filename)
+    if match:
+        episode = int(match.group(1))
+        season = int(match.group(2))
+        return EpisodeInfo(season=season, episode=episode)
 
     # Standard patterns (always try these if anime didn't match)
 

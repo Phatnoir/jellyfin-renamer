@@ -5,8 +5,22 @@ These tests verify that the Python parser matches the behavior of the
 original Bash implementation for all known filename patterns.
 """
 
+import json
+from pathlib import Path
+
 import pytest
 from renamer.parser import get_season_episode, EpisodeInfo, normalize_text
+
+
+def _load_corpus_section(section: str) -> list:
+    """Load a named section from the fixtures/filenames.json episode_patterns corpus."""
+    corpus_path = Path(__file__).parent / "fixtures" / "filenames.json"
+    with open(corpus_path) as f:
+        corpus = json.load(f)
+    return corpus["episode_patterns"][section]
+
+
+_LEADING_NUMBER_CASES = _load_corpus_section("leading_number_with_season")
 
 
 class TestStandardSxxExx:
@@ -90,6 +104,44 @@ class TestAnimeFansub:
         print(f"{filename} -> {result.format_code()} (no --anime flag)")
         assert result.season == 1
         assert result.episode == 1
+
+
+class TestLeadingNumberWithSeason:
+    """Test "01. Show-S1.mp4" style names (leading episode number + trailing -S# tag).
+
+    Cases are loaded directly from fixtures/filenames.json so the corpus is
+    genuinely exercised, not just documented.
+    """
+
+    @pytest.mark.parametrize(
+        "case",
+        _LEADING_NUMBER_CASES,
+        ids=[c["input"] for c in _LEADING_NUMBER_CASES],
+    )
+    def test_leading_number_with_season(self, case: dict):
+        result = get_season_episode(case["input"])
+        assert result is not None, f"Failed to parse: {case['input']}"
+        print(f"{case['input']} -> {result.format_code()}")
+        assert result.season == case["season"]
+        assert result.episode == case["episode"]
+
+    def test_sxxexx_still_wins_over_leading_number(self):
+        """A genuine SxxExx code must NOT be hijacked by the leading-number pattern.
+
+        "01. Show-S02E05.mkv" should parse as S02E05 (the real code), not
+        season=2/episode=1 from the leading "01" + "-S02".
+        """
+        result = get_season_episode("01. Show-S02E05.mkv")
+        assert result is not None
+        print(f"01. Show-S02E05.mkv -> {result.format_code()}")
+        assert result.season == 2
+        assert result.episode == 5
+
+    def test_leading_number_without_season_tag_does_not_match(self):
+        """A leading number with no -S# tag must not falsely match."""
+        result = get_season_episode("01. Just A Show.mkv")
+        print(f"01. Just A Show.mkv -> {result}")
+        assert result is None
 
 
 class TestNoMatch:

@@ -145,6 +145,22 @@ class TestRenameCompanions:
         assert srt.exists()
         assert not (tmp_path / "Show - S01E01.srt").exists()
 
+    def test_companion_collision_without_force_preserves_existing(self, tmp_path):
+        """When the destination subtitle already exists, it must not be silently overwritten."""
+        old_video = tmp_path / "01. Show-S1.mp4"
+        new_video = tmp_path / "Show - S01E01.mp4"
+        old_video.touch()
+        (tmp_path / "01. Show-S1.srt").write_text("old subtitle")
+        (tmp_path / "Show - S01E01.srt").write_text("do not overwrite")
+
+        results = rename_companions(old_video, new_video, dry_run=False)
+
+        assert len(results) == 1
+        assert results[0].success is False
+        assert results[0].skipped is True
+        assert (tmp_path / "Show - S01E01.srt").read_text() == "do not overwrite"
+        assert (tmp_path / "01. Show-S1.srt").exists()
+
     def test_multiple_companions_all_renamed(self, tmp_path):
         old_video = tmp_path / "01. Show-S1.mp4"
         new_video = tmp_path / "Show - S01E01.mp4"
@@ -352,6 +368,41 @@ class TestProcessDirectory:
         remaining = list(show_dir.iterdir())
         assert len(remaining) == 2
         assert all(f.name.startswith("0") for f in remaining)
+
+    def test_actual_rename_moves_video_and_companion(self, tmp_path):
+        """Non-dry-run: video and companion must both be moved to new names."""
+        show_dir = tmp_path / "Test Show (2009)"
+        show_dir.mkdir()
+        video = show_dir / "01. Show-S1.mp4"
+        subtitle = show_dir / "01. Show-S1.en.srt"
+        video.write_text("video data")
+        subtitle.write_text("subtitle data")
+
+        options = RenameOptions(dry_run=False, output_format=OutputFormat.SHOW_SXXEXX)
+        results = process_directory(show_dir, options)
+
+        assert len(results) == 1
+        assert results[0].success is True
+        assert not video.exists()
+        assert not subtitle.exists()
+        assert (show_dir / "Test Show - S01E01.mp4").read_text() == "video data"
+        assert (show_dir / "Test Show - S01E01.en.srt").read_text() == "subtitle data"
+
+    def test_batch_collision_second_file_is_skipped(self, tmp_path):
+        """Two files that parse to the same output name must not silently overwrite each other."""
+        show_dir = tmp_path / "Test Show (2009)"
+        show_dir.mkdir()
+        (show_dir / "Show.S01E01.First.mkv").touch()
+        (show_dir / "Show.1x01.Second.mkv").touch()
+
+        options = RenameOptions(dry_run=False, output_format=OutputFormat.SXXEXX)
+        results = process_directory(show_dir, options)
+
+        successes = [r for r in results if r.success and not r.skipped]
+        collisions = [r for r in results if r.skipped and not r.success]
+        assert len(successes) == 1
+        assert len(collisions) == 1
+        assert (show_dir / "S01E01.mkv").exists()
 
     def test_processes_files_across_season_subdirs(self, tmp_path):
         show_dir = tmp_path / "Test Show (2009)"

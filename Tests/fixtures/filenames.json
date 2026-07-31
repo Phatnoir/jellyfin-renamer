@@ -53,7 +53,8 @@
 
     "no_match": [
       {"input": "random_file.mkv", "season": null, "episode": null},
-      {"input": "movie.2020.1080p.mkv", "season": null, "episode": null}
+      {"input": "movie.2020.1080p.mkv", "season": null, "episode": null},
+      {"input": "some.documentary.mkv", "season": null, "episode": null}
     ]
   },
 

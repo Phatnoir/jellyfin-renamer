@@ -263,6 +263,10 @@ def _strip_technical_metadata(title: str) -> str:
     if re.match(r'^(720p|1080p|2160p|4K|WEB|BluRay|HDTV|x264|x265|HEVC|XviD|DivX)', title, re.IGNORECASE):
         return ""
 
+    # Platform tag with nothing before or after it (when title is ONLY the tag)
+    if re.match(r'^(AMZN|NFLX|NF|HULU|DSNP|HBO|MAX|HMAX)$', title, re.IGNORECASE):
+        return ""
+
     return title
 
 

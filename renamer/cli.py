@@ -272,21 +272,31 @@ def main(argv: list[str] | None = None) -> int:
     # Summary
     video_count = len(find_video_files(base_path))
     subtitle_count = len(find_subtitle_files(base_path))
+    failed = sum(1 for r in results if not r.success)
 
     print()
     print_status(Colors.BLUE, "=== Summary ===")
     print_status(Colors.GREEN, f"Total episode files: {video_count}")
     if subtitle_count > 0:
         print_status(Colors.GREEN, f"Total subtitle files: {subtitle_count}")
+    if failed:
+        print_status(Colors.RED, f"Failed files: {failed}")
 
     if args.dry_run:
         print()
         print_status(Colors.YELLOW, "This was a dry run. To apply changes, run without --dry-run")
         print_status(Colors.YELLOW, "Review the proposed changes above before proceeding.")
+    elif failed:
+        print()
+        print_status(Colors.RED, "Completed with errors.")
     else:
         print()
         print_status(Colors.GREEN, "Renaming complete!")
         print_status(Colors.BLUE, "Your files should now be compatible with Jellyfin/Plex.")
+
+    if failed and not args.dry_run:
+        print_status(Colors.RED, "Universal Media Renamer completed with errors!")
+        return 1
 
     print_status(Colors.PURPLE, "Universal Media Renamer completed successfully!")
 
